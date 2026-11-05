@@ -6,3 +6,6 @@ Thumbs.db
 .claude/
 # the private content workshop must never be copied in
 Concepts/
+
+# private session notes waiting to move into the content workshop
+handoff-out/
