@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
+Thumbs.db
+.claude/
+# the private content workshop must never be copied in
+Concepts/
