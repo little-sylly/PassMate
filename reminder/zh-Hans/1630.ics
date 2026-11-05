@@ -9,13 +9,13 @@ DTSTAMP:20261101T000000Z
 DTSTART:20261101T163000
 DURATION:PT10M
 RRULE:FREQ=DAILY
-SUMMARY:PassMate · 今天的 10 分钟
+SUMMARY:PassMate · 今天的 15 分钟
 DESCRIPTION:打开 PassMate，做今天的学习。\nhttps://little-sylly.g
  ithub.io/PassMate/
 URL:https://little-sylly.github.io/PassMate/
 BEGIN:VALARM
 ACTION:DISPLAY
-DESCRIPTION:PassMate · 今天的 10 分钟
+DESCRIPTION:PassMate · 今天的 15 分钟
 TRIGGER:PT0M
 END:VALARM
 END:VEVENT

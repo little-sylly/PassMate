@@ -2,14 +2,14 @@
 (function (PM) {
   'use strict';
   PM.config = {
-    version: '0.6.2',            // keep in step with CACHE in sw.js
+    version: '0.6.3',            // keep in step with CACHE in sw.js
     storeKey: 'passmate.v1',
     storeVersion: 2,
     dataFiles: {'zh-Hans': 'data/content.zh-Hans.json', 'zh-Hant': 'data/content.zh-Hant.json'},
     defaultScript: 'zh-Hans',
 
     // Session shape (BUILD_PLAN: Plan engine)
-    session: {words: 5, questions: 5, scenarios: 1, minutes: 10},
+    session: {words: 5, questions: 8, scenarios: 1, minutes: 15},   // 8 questions: Sam, 6 Nov (pace option B)
 
     // Stage and ready-to-sit thresholds. "Questions" = practice questions and wording drills,
     // counted from answers given at the stage below (stage 3 is judged on stage-2 answers).
@@ -28,7 +28,7 @@
     plan: {
       boxDays: [0, 1, 3, 7],     // Leitner box n -> next review n days on (box 3 stays at +7)
       repeatDays: [1, 3],        // a missed question comes back 1 day later, then 3 days later
-      repairQuestions: 3,        // question slots for stuck words, repeat mistakes and trap drills (not in sprint)
+      repairQuestions: 5,        // about 60% of the questions: slots for stuck words, repeat mistakes and trap drills (not in sprint)
       minNewWords: 3,            // word slots kept for new words while any are left (not in sprint)
       stuckDays: 3,              // tapped or missed on this many separate days = stuck
       stuckClearDays: 3,         // right on this many separate days unsticks it (A4: three squares)
