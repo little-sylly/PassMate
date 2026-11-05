@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /* Plan engine check: 30 simulated days of answers on a debug clock.
 
-     node tools/simulate_plan.js [--days 30] [--seed 7] [--learner typical|weak] [--quiet]
+     node tools/simulate_plan.js [--days 30] [--seed 7] [--learner typical|weak|strong] [--quiet]
+       [--fast]               she takes 快速通关 (the optional daily round) whenever it is offered
        [--no-date]            she never sets a test date (pace runs: --days 180 --no-date)
        [--trace A141]         one line a day for that word (drawn items, box, squares)
        [--set path=value]     try other numbers, e.g. --set session.questions=8 (repeatable)
@@ -19,10 +20,12 @@ function arg(name, def) { var i = args.indexOf('--' + name); return i === -1 ? d
 var DAYS = +arg('days', 30), SEED = +arg('seed', 7), QUIET = args.indexOf('--quiet') !== -1;
 var TRACE = arg('trace', null);                       // --trace A141: one line a day for that word
 var NO_DATE = args.indexOf('--no-date') !== -1;       // pace runs: she never adds a test date
-// typical: about 75% right at first with the Chinese gist; weak: about 60%, to stress the repair paths.
+// typical: about 75% right at first with the Chinese gist; weak: about 60%, to stress the repair
+// paths; strong: about 90%+, the confident learner 快速通关 is for.
 var LEARNER = arg('learner', 'typical');
-var BASE = {typical: 0.9, weak: 0.8}[LEARNER], SPREAD = {typical: 0.3, weak: 0.35}[LEARNER];
-if (BASE == null) { console.error('learner must be typical or weak'); process.exit(2); }
+var BASE = {typical: 0.9, weak: 0.8, strong: 1.1}[LEARNER], SPREAD = {typical: 0.3, weak: 0.35, strong: 0.15}[LEARNER];
+if (BASE == null) { console.error('learner must be typical, weak or strong'); process.exit(2); }
+var FAST = args.indexOf('--fast') !== -1;             // she takes 快速通关 whenever it is offered
 var START = new Date(2026, 10, 9);          // a Monday
 var MISSED = {6: 1, 13: 1, 14: 1, 22: 1};   // day 6 is forgiven; 13+14 end the streak; 22 forgiven again
 var DATE_SET_ON = 22, TEST_IN = 9;          // on day 22 she adds a test date 9 days out -> sprint from day 24
@@ -133,6 +136,32 @@ function checkOverdue(day, d) {
   });
 }
 
+// 快速通关's draw, checked before she answers: questions only, at most config.plan.fast.questions,
+// one a word, nothing stuck, mastered, waiting as a repeat, a seen twin, or in today's run.
+function checkFast(day, d, fitems, daily) {
+  var items = PM.store.get().items, cfg = PM.config.plan.fast, ids = {}, words = {}, dailyIds = {}, dailyWords = {};
+  daily.forEach(function (it) {
+    dailyIds[it.id] = 1;
+    dailyWords[it.kind === 'word' ? it.id : PM.plan.itemOf(it.id).term_id] = 1;
+  });
+  var stuck = {};
+  PM.plan.stuckIds().forEach(function (id) { stuck[id] = 1; });
+  if (!fitems.length || fitems.length > cfg.questions) fail(day, '快速通关 has ' + fitems.length + ' items');
+  fitems.forEach(function (it) {
+    var q = PM.content.question(it.id);
+    if (it.kind !== 'q' || !q) { fail(day, '快速通关 drew a ' + it.kind + ' ' + it.id); return; }
+    if (ids[it.id]) fail(day, '快速通关 duplicate ' + it.id);
+    ids[it.id] = 1;
+    if (words[q.term_id]) fail(day, '快速通关 two questions on ' + q.term_id);
+    words[q.term_id] = 1;
+    if (dailyIds[it.id] || dailyWords[q.term_id]) fail(day, '快速通关 ' + it.id + ' is from today\'s run');
+    if (stuck[q.term_id] || (q.wording_focus || []).some(function (w) { return stuck[w]; })) fail(day, '快速通关 ' + it.id + ' is on a stuck word');
+    if (PM.plan.isMastered(q.term_id, d)) fail(day, '快速通关 ' + it.id + ' is on mastered ' + q.term_id);
+    if (items[it.id] && items[it.id].repeat) fail(day, '快速通关 ' + it.id + ' is waiting as a repeat');
+    if (q.dup && items[q.dup] && items[q.dup].n) fail(day, '快速通关 ' + it.id + ' drawn although its twin was seen');
+  });
+}
+
 // Does answering this drawn item count for word `id`? (the item's own word, or its wording focus)
 function counts(it, id) {
   if (it.kind === 'word') return false;
@@ -227,6 +256,69 @@ function ruleChecks() {
     expect(cards.length === PM.config.session.words, 'all met' + (anyDue ? '' : ', none due') + ': ' + cards.length + ' cards');
     cards.forEach(function (c) { expect(c.why === 'review' && reviewedToday(c, items), 'all met: card ' + c.id + ' (' + c.why + ') has no question'); });
   });
+
+  // ---- 快速通关 -------------------------------------------------------------------------------
+  // Open/close thresholds on the last 20 question/drill answers (scenarios do not count).
+  function log(right, of, k) {
+    var s = PM.store.get(); s.log = [];
+    for (var i = 0; i < of; i++) s.log.push({d: day(0), k: k || 'q', id: 'PQ001', ok: i < right, h: 0, p: 1, st: 1});
+  }
+  function open(k) { return P.fastCheck(day(k || 0)).open; }
+  PM.store.reset(); PM.store.set({welcomed: true, dateAnswered: true});
+  log(19, 19); expect(!open(), '快速通关 opened on 19 answers (needs 20)');
+  log(17, 20, 'scenario'); expect(!open(), '快速通关 opened on scenario answers');
+  log(16, 20); expect(!open(), '快速通关 opened at 80%');
+  log(17, 20); expect(open(), '快速通关 not open at 85%');
+  log(16, 20); expect(open(), '快速通关 closed at 80% (closes only below 75%)');
+  log(15, 20); expect(open(), '快速通关 closed at 75% (closes only below 75%)');
+  log(14, 20); expect(!open(1), '快速通关 still open at 70%');
+  log(16, 20); expect(!open(1), '快速通关 reopened at 80% (needs 85%)');
+  var st = PM.store.get();
+  st.mocks = [{d: day(0), right: 19, total: 20, values: 5, valuesTotal: 5, pass: true, english: true}];
+  expect(!open(2), '快速通关 reopened by a mock taken before it closed');
+  st.mocks.push({d: day(2), right: 17, total: 20, values: 5, valuesTotal: 5, pass: true, english: true});
+  expect(!open(2), '快速通关 opened by a 17/20 mock');
+  st.mocks.push({d: day(2), right: 18, total: 20, values: 4, valuesTotal: 5, pass: false, english: true});
+  expect(!open(2), '快速通关 opened by a failed mock');
+  log(14, 20); st.mocks.push({d: day(2), right: 18, total: 20, values: 5, valuesTotal: 5, pass: true, english: true});
+  expect(!open(2), '快速通关 opened by a mock while the last 20 are below 75% (it would flicker)');
+  log(16, 20); expect(open(2), '快速通关 not opened by a passed 18/20 mock');
+
+  // Only after today's daily run, one round a day, never in sprint week, never the streak.
+  PM.store.reset(); PM.store.set({welcomed: true, dateAnswered: true});
+  ['A001', 'A002', 'A003', 'A004', 'A005', 'A006'].forEach(function (id) { P.recordWord(id, true, day(0)); });
+  log(20, 20);
+  at(3);
+  expect(open(3) && !P.fastAvailable(day(3)), '快速通关 offered before the daily run');
+  expect(P.fastRun() === null, '快速通关 round made before the daily run');
+  var daily = P.todayRun();
+  daily.done = true; P.finishDay(day(3));
+  expect(P.fastAvailable(day(3)), '快速通关 not offered after the daily run');
+  var guard = PM.config.plan.fast.maxStuck, its = PM.store.get().items;
+  ['A001', 'A002', 'A003'].slice(0, guard + 1).forEach(function (id) { its[id].stuck = true; });
+  expect(!P.fastAvailable(day(3)), '快速通关 offered with ' + (guard + 1) + ' stuck words (max ' + guard + ')');
+  ['A001', 'A002', 'A003'].forEach(function (id) { its[id].stuck = false; });
+  PM.store.set({testDate: day(8)});
+  expect(!P.fastAvailable(day(3)), '快速通关 offered in sprint week');
+  PM.store.set({testDate: null});
+  var streakBefore = JSON.stringify(PM.store.get().streak);
+  sandbox.location.hash = '#/session?fast=1';
+  var fr = PM.session.resume();
+  expect(fr.fast && fr.items.length === PM.config.plan.fast.questions && PM.plan.fastRun() === fr, '快速通关 round: ' + fr.items.length + ' items, kept in the store');
+  checkFast('rule', day(3), fr.items, daily.items);
+  // The word a question counts for: its term, or its wording focus (NOT, EXCEPT...).
+  function wordsOf(id) { var q = PM.content.question(id); return [q.term_id].concat(q.wording_focus || []); }
+  var unmet = fr.items.filter(function (it) { return wordsOf(it.id).some(function (w) { return !rec(w).met; }); }).length;
+  expect(unmet === fr.items.length, '快速通关 at the start: every question on a word not yet met (' + unmet + ')');
+  fr.items.forEach(function (it) { PM.session.answerChoice('q', PM.content.question(it.id), PM.content.question(it.id).answer); PM.session.advance(); });
+  PM.session.finish();
+  expect(JSON.stringify(PM.store.get().streak) === streakBefore && !fr.streakAdded, '快速通关 touched the streak');
+  expect(!P.fastAvailable(day(3)) && P.fastRun() === fr && fr.done, '快速通关 offered twice in a day');
+  expect(fr.items.every(function (it) { return wordsOf(it.id).some(function (w) { return rec(w).met === day(3) && rec(w).rightDays.length === 1; }); }),
+    '快速通关: an unmet word answered right is met today with one right day');
+  at(4);
+  expect(!P.fastAvailable(day(4)) && P.fastRun() === null, '快速通关 offered the next day before the daily run');
+  sandbox.location.hash = '#/session';
   return n;
 }
 
@@ -251,6 +343,7 @@ function pad(s, n) { s = String(s); while (s.length < n) s += ' '; return s; }
 PM.content.load('zh-Hans').then(function () {
   PM.store.set({welcomed: true, dateAnswered: true, script: 'zh-Hans'});
   var stageDays = {}, rows = [], streakSeen = {};
+  var fastOpenDays = 0, fastRounds = 0, fastQs = 0, fastRightAll = 0;
 
   for (var day = 0; day < DAYS; day++) {
     var now = new Date(START.getFullYear(), START.getMonth(), START.getDate() + day);
@@ -272,6 +365,7 @@ PM.content.load('zh-Hans').then(function () {
     var stuckBefore = PM.plan.stuckIds();
     var c = checkDraw(day, d, run.items, sprint);
     checkOverdue(day, d);
+    if (PM.plan.fastAvailable(d) || PM.plan.fastToday(d)) fail(day, '快速通关 offered before the daily run is finished');
     var stage = PM.store.get().stage;
 
     var right = 0, asked = 0;
@@ -320,6 +414,45 @@ PM.content.load('zh-Hans').then(function () {
       if (PM.store.get().run.date !== d || PM.store.get().run.extra) fail(day, 'extra practice replaced the daily run');
     }
 
+    // 快速通关: offered after the daily run when open (never in sprint week); with --fast she takes it.
+    var fastAvail = PM.plan.fastAvailable(d), fastLine = '';
+    if (PM.plan.fastCheck(d).open) fastOpenDays++;
+    if (fastAvail && sprint) fail(day, '快速通关 offered in sprint week');
+    if (fastAvail && FAST) {
+      var streakBefore = JSON.stringify(PM.store.get().streak.days), dailyRun = PM.store.get().run;
+      sandbox.location.hash = '#/session?fast=1';
+      var fr = PM.session.resume();
+      checkFast(day, d, fr.items, dailyRun.items);
+      var nBefore = {}, fRight = 0;
+      fr.items.forEach(function (x) { nBefore[x.id] = (PM.store.get().items[x.id] || {}).n || 0; });
+      while (fr.i < fr.items.length) {
+        var fq = PM.content.question(fr.items[fr.i].id);
+        // English only: she taps underlined words she is unsure of, like stage 3.
+        ((fq.a && fq.a.q) || []).forEach(function (sp) { if (rand() < (1 - skill(sp[2])) * 0.2) PM.session.tap(sp[2]); });
+        var fok = rand() < pRight(fq, 'q') - 0.04 * (3 - stage);
+        PM.session.answerChoice('q', fq, fok ? fq.answer : (fq.answer === 'a' ? 'b' : 'a'));
+        if (fok) fRight++;
+        // A reload mid-round, after an answer and before 下一题: the round resumes, nothing twice.
+        if (fr.i === 3) {
+          PM.store.replace(JSON.parse(storage[PM.config.storeKey]));
+          var again = PM.session.resume();
+          if (again.i !== 4 || again.results.length !== 4) fail(day, '快速通关 did not resume after a reload (i ' + again.i + ')');
+          fr = again;
+          continue;
+        }
+        PM.session.advance();
+      }
+      PM.session.finish();
+      var after = PM.store.get().items;
+      fr.items.forEach(function (x) { if ((after[x.id].n || 0) !== nBefore[x.id] + 1) fail(day, '快速通关 recorded ' + x.id + ' ' + (after[x.id].n - nBefore[x.id]) + ' times'); });
+      if (JSON.stringify(PM.store.get().streak.days) !== streakBefore || fr.streakAdded) fail(day, '快速通关 touched the streak');
+      if (PM.plan.fastAvailable(d) || PM.plan.fastRun() !== PM.store.get().fast.run) fail(day, '快速通关 offered twice in a day');
+      sandbox.location.hash = '#/session';
+      if (PM.store.get().run.date !== d || PM.store.get().run.fast || !PM.store.get().run.done) fail(day, '快速通关 replaced the daily run');
+      fastRounds++; fastQs += fr.items.length; fastRightAll += fRight;
+      fastLine = '+fast ' + fRight + '/' + fr.items.length;
+    }
+
     var s = PM.store.get();
     stuckReport(day, run.items, stuckBefore);
     paceRow(day, d);
@@ -332,7 +465,7 @@ PM.content.load('zh-Hans').then(function () {
       ' right ' + right + '/' + asked +
       '  met ' + pad(PM.plan.metCount(), 4) + 'mastered ' + pad(PM.plan.masteredCount(d), 4) +
       'stuck ' + pad(PM.plan.stuckIds().length, 3) + 'review ' + pad(PM.plan.repeats().length, 3) +
-      (extraN ? '+extra ' + extraN : ''));
+      (extraN ? '+extra ' + extraN + ' ' : '') + fastLine);
   }
 
   // Streak rules: day 6 is forgiven (streak carries on), days 13+14 end it, day 22 forgiven.
@@ -349,6 +482,8 @@ PM.content.load('zh-Hans').then(function () {
   console.log('ready to sit: ' + PM.plan.readiness().list.map(function (c) { return c.key + (c.ok ? ' ✓' : ' ✗'); }).join('  '));
   console.log('learner ' + LEARNER + ', most overdue repeat mistake: ' + maxLate + ' days');
   console.log('store record ' + Math.round(raw.length / 1024) + ' KB');
+  console.log('快速通关 open on ' + fastOpenDays + ' days' + (FAST ? ', taken ' + fastRounds + ' times, ' + fastQs + ' questions, ' +
+    (fastQs ? Math.round(fastRightAll / fastQs * 100) : 0) + '% right' : ' (not taken: run with --fast)'));
   var sp = openSpells(DAYS);
   console.log('stuck spells ' + sp.length + ', longest: ' + sp.slice(0, 6).map(function (x) { return x.id + ' ' + x.days + 'd' + (x.open ? '+' : ''); }).join(', ') +
     '; stuck-word days with nothing drawn that could unstick it: ' + stuckNoQ + ' / ' + stuckDays);

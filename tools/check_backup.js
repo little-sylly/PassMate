@@ -107,6 +107,16 @@ async function main() {
   var lastDay = PM.dates.iso();
   var gr = PM.exam.startGate(lastDay); gr.answers[0] = PM.content.question(gr.ids[0]).answer; gr.i = 1;
   var mk = PM.exam.startMock(lastDay); mk.answers[0] = 'a'; mk.answers[3] = 'c'; mk.i = 4;
+  // 快速通关 open and half done (her accuracy and stuck words here would keep it shut, so open it by hand).
+  PM.store.get().fast.open = true; PM.store.get().fast.at = lastDay;
+  var maxStuck = PM.config.plan.fast.maxStuck; PM.config.plan.fast.maxStuck = null;
+  A.sandbox.location.hash = '#/session?fast=1';
+  var fr = PM.session.resume();
+  check(fr && fr.fast && fr.items.length > 2, '快速通关 round to back up');
+  [0, 1].forEach(function () { var q = PM.content.question(fr.items[fr.i].id); PM.session.answerChoice('q', q, q.answer); PM.session.advance(); });
+  PM.session.leave();
+  PM.config.plan.fast.maxStuck = maxStuck;
+  A.sandbox.location.hash = '#/session';
   PM.session.flag('PQ001', '“原住民”这里读起来不太自然', 'q');
   PM.session.flag('A092', '', 'sheet');
   PM.session.flag('QW01', '对照题的解释有错字', 'twin');
@@ -209,6 +219,18 @@ async function main() {
   var ev = E.PM.store.get();
   check(ev.v === 2 && ev.items.A001.met === '2026-11-01' && ev.items.PQ002.repeat && Array.isArray(ev.flags) && ev.gate && ev.mocks,
     'a v1 backup is migrated to v2 with the new fields');
+  check(ev.fast && ev.fast.open === false && ev.fast.run === null, 'a v1 backup gets the 快速通关 defaults');
+  // A 0.6.x backup (before 快速通关: no s.fast) restores, gets the defaults, and the round works on it.
+  var old = plain(PM.store.get()); delete old.fast;
+  var F = makeApp();
+  await F.PM.content.load('zh-Hans');
+  F.PM.clock.set(PM.clock.offset);
+  check(F.PM.backup.restore(F.PM.backup.make(old)).ok, 'a 0.6.x backup (no 快速通关 field) restores');
+  var fv = F.PM.store.get();
+  check(fv.fast && fv.fast.open === false && fv.fast.at === null && fv.fast.run === null, 'a 0.6.x backup gets the 快速通关 defaults');
+  check(typeof F.PM.plan.fastAvailable() === 'boolean' && F.PM.plan.fastToday() === null, '快速通关 works on a restored 0.6.x record');
+  var d5 = diff(Object.assign({}, old, {fast: fv.fast}), plain(fv));
+  check(!d5, 'a 0.6.x backup keeps everything else' + (d5 ? ' (' + d5 + ')' : ''));
   // A big store (90 days' worth) still makes a usable code.
   var big = plain(PM.store.get());
   for (var k = 1; k <= 400; k++) { var id = 'PQ' + ('00' + k).slice(-3); big.items[id] = big.items[id] || {n: 3, right: 2, taps: 1, last: '2027-01-0' + (k % 9 + 1), lastRight: true, know: null}; }

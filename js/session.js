@@ -1,6 +1,7 @@
 /* Session run: which items, where she is, what she did.
    The daily run comes from the plan engine and lives in the store (a refresh resumes it);
-   the optional 再练 run lives in memory and never touches the streak. */
+   the optional 再练 run lives in memory and never touches the streak; 快速通关 (#/session?fast=1)
+   lives in the store (s.fast.run, a refresh resumes it) and never touches the streak either. */
 (function (PM) {
   'use strict';
 
@@ -10,6 +11,9 @@
     return m ? +m[1] : (PM.store.get().stage || 1);
   }
   function wantsExtra() { return /[?&]extra=1\b/.test(location.hash || ''); }
+  function wantsFast() { return /[?&]fast=1\b/.test(location.hash || ''); }
+  // Only the daily run counts for the streak: never 再练, never 快速通关.
+  function daily(r) { return !r.extra && !r.fast; }
 
   function exists(it) {
     var k = it.kind;
@@ -31,7 +35,7 @@
   // The day counts as soon as the last item is answered, so leaving before the results screen
   // does not lose the streak. 看今天的结果 (finish) then only marks the run done.
   function creditLast(r) {
-    if (r.extra || r.streakCredited || r.i !== r.items.length - 1) return;
+    if (!daily(r) || r.streakCredited || r.i !== r.items.length - 1) return;
     r.streakAdded = PM.plan.finishDay(r.date);
     r.streakCredited = true;
   }
@@ -39,6 +43,8 @@
   PM.session = {
     stage: stage,
     current: function () {
+      // 快速通关: today's round, or an empty run (the view sends her back to Today) when there is none.
+      if (wantsFast()) return PM.plan.fastRun() || {date: PM.dates.iso(), fast: true, items: [], i: 0, results: [], done: false};
       if (!wantsExtra()) return PM.plan.todayRun();
       if (!extra || extra.date !== PM.dates.iso()) extra = PM.plan.extraRun();
       return extra;
@@ -54,6 +60,7 @@
       return r;
     },
     isExtra: function () { return wantsExtra(); },
+    isFast: function () { return wantsFast(); },
     startExtra: function () { active = extra = PM.plan.extraRun(); },
     leave: function () { if (active && active.extra) extra = null; active = null; PM.store.save(); },
     advance: function () { run().i++; PM.store.save(); },
@@ -96,7 +103,7 @@
     finish: function () {
       var r = run();
       r.done = true;
-      if (!r.extra && !r.streakCredited) { r.streakAdded = PM.plan.finishDay(r.date); r.streakCredited = true; }
+      if (daily(r) && !r.streakCredited) { r.streakAdded = PM.plan.finishDay(r.date); r.streakCredited = true; }
       PM.store.save();
       return r;
     }

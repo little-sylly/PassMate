@@ -193,6 +193,20 @@
     "remindOffer": "每天提醒我学习",
     "remindOfferSub": "加到手机日历，每天同一时间提醒"
   },
+  "fast": {
+    "title": "快速通关",
+    "sub": "最近答得很好，可以再做 {n} 道全英文题。答对的也算进度。",
+    "continue": "继续快速通关",
+    "going": "已做 {n} / {m} 题",
+    "tab": "快速通关",
+    "finish": "看这一轮的结果",
+    "doneTitle": "快速通关做完了",
+    "doneRight": "题答对",
+    "doneMet": "个新词",
+    "doneNote": "一个词要在 {n} 个不同的日子答对，才算掌握。今天答对的，算其中一天。",
+    "doneMissed": "答错的 {n} 道已记入错题本，明天再练。",
+    "doneStreak": "快速通关不影响连续天数，每天最多一轮。"
+  },
   "install": {
     "update": "有新版本了，重新打开 App 就会更新。"
   },

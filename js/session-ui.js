@@ -156,14 +156,16 @@
   }
 
   // The current stage as one thumb-index tab on the right edge (A2).
-  function stageTab(stage) {
-    return h('div', {class: 'stages sess-stage', role: 'note', 'aria-label': T('stages.aria') + '：' + T('stages.' + stage)},
-      [h('div', {class: 'stage stage-on', 'aria-hidden': 'true'}, T('stages.' + stage))]);
+  // 快速通关 shows its own name there: it is English only whatever her stage.
+  function stageTab(stage, fast) {
+    var label = fast ? T('fast.tab') : T('stages.' + stage);
+    return h('div', {class: 'stages sess-stage', role: 'note', 'aria-label': fast ? label : T('stages.aria') + '：' + label},
+      [h('div', {class: 'stage stage-on', 'aria-hidden': 'true'}, label)]);
   }
 
   // `foot` = node pinned to the bottom
   function frame(run, main, foot, stage) {
-    return [topBar(run), h('main', {class: 'sess-main'}, [stageTab(stage)].concat(main)), h('div', {class: 'foot'}, foot)];
+    return [topBar(run), h('main', {class: 'sess-main'}, [stageTab(stage, run.fast)].concat(main)), h('div', {class: 'foot'}, foot)];
   }
 
   // ---- word card -------------------------------------------------------------------
@@ -224,7 +226,7 @@
 
   function nextLabel(run) {
     var cur = run.items[run.i], nxt = run.items[run.i + 1];
-    if (!nxt) return T('session.finish');
+    if (!nxt) return run.fast ? T('fast.finish') : T('session.finish');
     var a = slot(cur.kind), b = slot(nxt.kind);
     if (a === 'word') return b === 'word' ? T('session.nextWord') : b === 'q' ? T('session.startQuestions') : T('session.toScenario');
     if (a === 'q') return b === 'q' ? T('session.nextQuestion') : T('session.toScenario');
@@ -469,6 +471,38 @@
     ]);
   }
 
+  // 快速通关 on Done and on Today's finished state, only when the plan offers it.
+  function fastCard(d) {
+    if (!PM.plan.fastAvailable(d)) return null;
+    var cur = PM.plan.fastToday(d), going = cur && cur.i > 0;
+    var n = cur ? cur.items.length : PM.plan.fastDraw(d).length;
+    return h('a', {class: 'nav-row fast-row', href: '#/session?fast=1', onclick: function () { PM.session.leave(); }}, [
+      h('span', null, [
+        h('span', {class: 'nav-title'}, going ? T('fast.continue') : T('fast.title')),
+        h('span', {class: 'nav-sub'}, going ? T('fast.going', {n: cur.i, m: n}) : T('fast.sub', {n: n}))
+      ]),
+      icon(20, ['M9 5l7 7-7 7'])
+    ]);
+  }
+
+  // The round's result: right answers, words it met, and what mastery still needs.
+  function fastDone(run, stat) {
+    var right = run.results.filter(function (r) { return r.ok; }).length, total = run.results.length;
+    var met = Math.max(0, PM.plan.metCount() - (run.metAtStart || 0));
+    return h('div', {class: 'page page-plain'}, [
+      h('header', {class: 'cover cover-slim'}, [
+        h('div', {class: 'done-title'}, [h('span', {class: 'done-mark'}, icon(20, ['M5 12.5l4.5 4.5L19 7.5'])), h('h1', null, T('fast.doneTitle'))])
+      ]),
+      h('main', {class: 'body'}, [
+        h('div', {class: 'stats'}, [stat(right + ' / ' + total, T('fast.doneRight')), stat(String(met), T('fast.doneMet'))]),
+        h('p', {class: 'fine fast-note'}, T('fast.doneNote', {n: PM.config.mastered.rightOnDays})),
+        total > right ? h('p', {class: 'fine fine-tight'}, T('fast.doneMissed', {n: total - right})) : null,
+        h('p', {class: 'fine fine-tight'}, T('fast.doneStreak')),
+        h('a', {class: 'btn', href: '#/today', onclick: function () { PM.session.leave(); }}, T('session.home'))
+      ])
+    ]);
+  }
+
   function done(run) {
     var s = PM.store.get();
     var qs = run.results.filter(function (r) { return r.kind === 'q' || r.kind === 'drill'; });
@@ -477,6 +511,7 @@
     function stat(main, label) {
       return h('div', {class: 'stat'}, [h('div', {class: 'stat-n num'}, main), h('div', {class: 'stat-l'}, label)]);
     }
+    if (run.fast) return fastDone(run, stat);
     var mastered = PM.plan.masteredCount(run.date), gained = Math.max(0, mastered - (run.masteredAtStart || 0));
     var stats = h('div', {class: 'stats'}, [
       stat(right(qs) + ' / ' + qs.length, T('session.doneQ')),
@@ -525,6 +560,7 @@
         h('p', {class: 'tomorrow'}, mixed(tomorrowLine(run))),
         home,
         extraBtn,
+        fastCard(run.date),
         reminderOffer(s)
       ]))
     ]);
@@ -533,7 +569,7 @@
   // ---- the route view ---------------------------------------------------------------------
   function view() {
     var run = PM.session.resume();
-    var stage = PM.session.stage();
+    var stage = run.fast ? 3 : PM.session.stage();   // 快速通关: English only (no gist, no 看中文提示)
     var page = h('div', {class: 'page sess'});
     if (!run.items.length) { PM.router.go('today'); return page; }
 
@@ -566,6 +602,6 @@
   }
 
   // Shared with the gate and mock screens (exam-ui.js).
-  PM.sessionUI = {view: view, openSheet: openSheet, closeSheet: closeSheet, flagLink: flagLink, squares: squares,
+  PM.sessionUI = {view: view, openSheet: openSheet, closeSheet: closeSheet, flagLink: flagLink, squares: squares, fastCard: fastCard,
     wordSheet: wordSheet, entry: entry};
 })(window.PM = window.PM || {});

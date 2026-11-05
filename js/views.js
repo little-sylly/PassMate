@@ -243,7 +243,8 @@
         h('div', {class: 'done-note'}, [h('span', {class: 'done-mark done-mark-ink'}, icon(18, ['M5 12.5l4.5 4.5L19 7.5'])),
           h('span', null, [h('strong', null, T('today.doneTitle')), h('span', {class: 'done-note-sub'}, T('today.doneSub'))])]),
         extraN ? h('a', {class: 'btn', href: '#/session?extra=1', onclick: function () { PM.session.startExtra(); }}, T('today.extra', {n: extraN})) : null,
-        h('a', {class: 'btn btn-quiet', href: '#/session'}, T('today.seeResult'))
+        h('a', {class: 'btn btn-quiet', href: '#/session'}, T('today.seeResult')),
+        PM.sessionUI.fastCard(d)
       ];
     } else {
       action = [h('a', {class: 'btn', href: '#/session'}, run.i > 0 ? T('today.continue') : T('today.start'))];

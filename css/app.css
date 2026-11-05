@@ -56,7 +56,8 @@ h1:focus { outline: none; }
 .toggle button[aria-pressed="true"] { background: #fff; color: var(--cover); font-weight: 600; }
 
 /* streak + week */
-.streak-row { margin-top: 14px; display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; }
+/* wraps: at 320 px a two-digit streak plus the week was 332 px wide (found in session 22) */
+.streak-row { margin-top: 14px; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px; }
 .streak { display: flex; align-items: baseline; gap: 6px; margin-top: 2px; }
 .streak-n { font-size: 64px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
 .streak-u { font-size: 22px; font-weight: 600; }
@@ -68,6 +69,7 @@ h1:focus { outline: none; }
 .mark-saved { border: 2px dashed rgba(255,255,255,.75); }
 .mark-today { border: 2px solid #fff; }
 .mark-next { background: rgba(255,255,255,.18); }
+@media (max-width: 360px) { .week { gap: 4px; } .mark { width: 20px; height: 20px; } }
 .mastery { margin-top: 16px; display: flex; align-items: baseline; justify-content: space-between; font-size: 14px; color: var(--on-cover-muted); }
 .mastery strong { color: #fff; font-weight: 600; }
 .num { font-variant-numeric: tabular-nums; }
@@ -281,6 +283,11 @@ h1:focus { outline: none; }
 .switch[aria-checked="true"] .switch-knob { left: 23px; }
 .hero-title-sm { margin-top: 18px; font-size: 26px; }
 .remind-row { margin-top: 14px; border-top: 1px solid var(--rule); }
+/* 快速通关: the optional round, after the daily run */
+.fast-row { margin-top: 14px; border-top: 1px solid var(--rule); padding: 8px 0; }
+.fast-row .nav-title { color: var(--cover); }
+.fast-row + .remind-row { margin-top: 0; border-top: 0; }
+.fast-note { margin-top: 16px; }
 
 /* In-app browser banner */
 .inapp { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px 10px 16px; background: #FFF4E5; border-bottom: 1px solid #F1D3A6; color: #5C3A06; font-size: 14px; line-height: 1.5; }

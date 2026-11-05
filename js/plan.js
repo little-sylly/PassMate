@@ -170,6 +170,7 @@
       });
     }
     if (kind === 'drill') s.wording[item.term_id] = 0;
+    fastCheck(d);
   }
 
   // ---- state queries -------------------------------------------------------------------------
@@ -220,6 +221,62 @@
     };
   }
 
+  // ---- picking a question for a word (the daily draw and 快速通关 share it) ----------------------
+  // used: ids already in this draw. drillOk(): may a drill still be added?
+  function picker(items, used, stage, rand, drillOk) {
+    var x = index(), cfg = C();
+    function seen(id) { var r = items[id]; return !!(r && r.n); }
+    function pending(id) { var r = items[id]; return !!(r && r.repeat); }
+    function dupTaken(id) { var o = x.dup[id]; return !!(o && (seen(o) || used[o])); }
+
+    function wantDifficulty() {
+      if (stage === 1) return rand() < 0.4 ? 1 : 2;
+      var mix = cfg.difficultyMix, r = rand(), acc = 0;
+      for (var k in mix) { acc += mix[k]; if (r < acc) return +k; }
+      return 2;
+    }
+
+    // A question (or drill) for term `id`: unseen first at the right difficulty, else the one
+    // seen longest ago. Items waiting as repeat mistakes come back by their own schedule
+    // (o.pending lets one in early: a stuck word whose every question is waiting).
+    function questionFor(id, o) {
+      o = o || {};
+      var t = x.term[id];
+      if (!t) return null;
+      var c = [];
+      if (t.part === 5 && o.drill !== false && drillOk()) c = c.concat(x.drillByTerm[id] || []);
+      c = c.concat(t.part === 5 ? (x.qByFocus[id] || []) : (x.qByTerm[id] || []));
+      if (!c.length && o.anchor) c = x.qByAnchor[id] || [];
+      c = c.filter(function (q) {
+        return !used[q] && (o.pending || !pending(q)) && !dupTaken(q) && !(o.maxDiff && (itemOf(q).difficulty || 1) > o.maxDiff);
+      });
+      if (!c.length) return null;
+      var fresh = c.filter(function (q) { return !seen(q); });
+      if (fresh.length) {
+        var want = wantDifficulty();
+        fresh.sort(function (a, b) {
+          var ia = itemOf(a), ib = itemOf(b);
+          var da = Math.abs((ia.difficulty || 2) - want), db = Math.abs((ib.difficulty || 2) - want);
+          if (stage === 1) { da += (ia.difficulty || 2) > 2 ? 5 : 0; db += (ib.difficulty || 2) > 2 ? 5 : 0; }
+          return da - db || (a < b ? -1 : 1);
+        });
+        return fresh[0];
+      }
+      c.sort(function (a, b) { return items[a].last < items[b].last ? -1 : items[a].last > items[b].last ? 1 : (a < b ? -1 : 1); });
+      return c[0];
+    }
+    return {seen: seen, pending: pending, dupTaken: dupTaken, questionFor: questionFor};
+  }
+
+  // Met words not yet mastered, weakest first: fewest right days, then the most recent trouble.
+  function weakest(list, items) {
+    return list.sort(function (a, b) {
+      var ra = items[a], rb = items[b];
+      var ta = ra.lastTrouble || '', tb = rb.lastTrouble || '';
+      return (ra.rightDays || []).length - (rb.rightDays || []).length || (ta > tb ? -1 : ta < tb ? 1 : (a < b ? -1 : 1));
+    });
+  }
+
   // ---- the daily draw --------------------------------------------------------------------------
   // Returns [{kind, id, why}] : words, then questions (and drills), then the scenario.
   // why: stuck | confuse | again | new | review | weak  (words)
@@ -230,6 +287,8 @@
     var stage = s.stage || 1, inSprint = sprint(d), rand = rng('pm' + d);
     var used = {}, words = [], qs = [], scenario = null, drills = 0;
     var items = s.items;
+    var pick = picker(items, used, stage, rand, function () { return drills < cfg.maxDrills; });
+    var seen = pick.seen, pending = pick.pending, dupTaken = pick.dupTaken, questionFor = pick.questionFor;
 
     // Repair work (stuck words, repeat mistakes, 还不熟 cards) has a budget, so new words and
     // reviews keep moving and a bad week never becomes a wall of failures. Sprint week lifts it.
@@ -253,46 +312,6 @@
       if (REPAIR[why]) nQRepair++;
       used[id] = 1; qs.push({kind: k, id: id, why: why});
       return true;
-    }
-    function seen(id) { var r = items[id]; return !!(r && r.n); }
-    function pending(id) { var r = items[id]; return !!(r && r.repeat); }
-    function dupTaken(id) { var o = x.dup[id]; return !!(o && (seen(o) || used[o])); }
-
-    function wantDifficulty() {
-      if (stage === 1) return rand() < 0.4 ? 1 : 2;
-      var mix = cfg.difficultyMix, r = rand(), acc = 0;
-      for (var k in mix) { acc += mix[k]; if (r < acc) return +k; }
-      return 2;
-    }
-
-    // A question (or drill) for term `id`: unseen first at the right difficulty, else the one
-    // seen longest ago. Items waiting as repeat mistakes come back by their own schedule
-    // (o.pending lets one in early: a stuck word whose every question is waiting).
-    function questionFor(id, o) {
-      o = o || {};
-      var t = x.term[id];
-      if (!t) return null;
-      var c = [];
-      if (t.part === 5 && o.drill !== false && drills < cfg.maxDrills) c = c.concat(x.drillByTerm[id] || []);
-      c = c.concat(t.part === 5 ? (x.qByFocus[id] || []) : (x.qByTerm[id] || []));
-      if (!c.length && o.anchor) c = x.qByAnchor[id] || [];
-      c = c.filter(function (q) {
-        return !used[q] && (o.pending || !pending(q)) && !dupTaken(q) && !(o.maxDiff && (itemOf(q).difficulty || 1) > o.maxDiff);
-      });
-      if (!c.length) return null;
-      var fresh = c.filter(function (q) { return !seen(q); });
-      if (fresh.length) {
-        var want = wantDifficulty();
-        fresh.sort(function (a, b) {
-          var ia = itemOf(a), ib = itemOf(b);
-          var da = Math.abs((ia.difficulty || 2) - want), db = Math.abs((ib.difficulty || 2) - want);
-          if (stage === 1) { da += (ia.difficulty || 2) > 2 ? 5 : 0; db += (ib.difficulty || 2) > 2 ? 5 : 0; }
-          return da - db || (a < b ? -1 : 1);
-        });
-        return fresh[0];
-      }
-      c.sort(function (a, b) { return items[a].last < items[b].last ? -1 : items[a].last > items[b].last ? 1 : (a < b ? -1 : 1); });
-      return c[0];
     }
 
     // 1. Stuck words first: the word, a question that uses it, and the words it gets confused with.
@@ -349,19 +368,12 @@
       .forEach(function (id) { addWord(id, 'again'); });
 
     function metNotMastered() {
-      return Object.keys(items).filter(function (id) { return x.term[id] && items[id].met && !isMastered(id, d); });
-    }
-    function weakest(list) {
-      return list.sort(function (a, b) {
-        var ra = items[a], rb = items[b];
-        var ta = ra.lastTrouble || '', tb = rb.lastTrouble || '';
-        return (ra.rightDays || []).length - (rb.rightDays || []).length || (ta > tb ? -1 : ta < tb ? 1 : (a < b ? -1 : 1));
-      });
+      return weakest(Object.keys(items).filter(function (id) { return x.term[id] && items[id].met && !isMastered(id, d); }), items);
     }
 
     if (inSprint) {
       // Final week: only stuck words, repeat mistakes and values; shaky words fill the cards.
-      weakest(metNotMastered()).forEach(function (id) { addWord(id, 'weak'); });
+      metNotMastered().forEach(function (id) { addWord(id, 'weak'); });
       var p4 = x.part4.filter(function (q) { return !used[q] && !pending(q); });
       p4.sort(function (a, b) {
         var la = (items[a] || {}).last || '', lb = (items[b] || {}).last || '';
@@ -407,10 +419,10 @@
       // 5. New questions: today's new words first.
       newWords.forEach(function (id) { addQ(questionFor(id, {maxDiff: stage === 1 ? 2 : 0}), 'new'); });
       // Cards still free (every word met): the shakiest words, each with a question.
-      if (words.length < sess.words) weakest(metNotMastered()).forEach(function (id) { if (words.length < sess.words) review(id); });
+      if (words.length < sess.words) metNotMastered().forEach(function (id) { if (words.length < sess.words) review(id); });
       // Then more questions on words already met.
       if (qs.length < sess.questions) {
-        weakest(metNotMastered()).forEach(function (id) { addQ(questionFor(id), 'more'); });
+        metNotMastered().forEach(function (id) { addQ(questionFor(id), 'more'); });
       }
     }
     // Last resort: any question not yet seen (stage 1: difficulty 1-2 only).
@@ -466,6 +478,106 @@
     var ids = repeats().slice(0, C().extraQuestions);
     return {date: d, extra: true, items: ids.map(function (id) { return {kind: kindOf(id), id: id, why: 'repeat'}; }),
       i: 0, results: [], taps: 0, hints: 0, done: false, streakAdded: false, masteredAtStart: masteredCount(d)};
+  }
+
+  // ---- 快速通关: an optional daily round for confident learners (Sam, 6 Nov) -------------------
+  // What a confident learner lacks is questions on the days she aces them: mastery needs right
+  // answers on separate days, so a placement test could not move her up fairly. The round opens
+  // by accuracy and is only real answers through recordChoice: no self-report, no streak.
+  // State in s.fast = {open, at (day it last opened or closed), run (today's round)}.
+  function fastState() {
+    var s = S();
+    return s.fast || (s.fast = {open: false, at: null, run: null});
+  }
+  // Opens when the last 20 question/drill answers are >= 85% right, or after a passed mock with
+  // >= 18/20 (taken since it last closed); closes only when the last 20 fall below 75%, so it does
+  // not flicker. Run after every answer and whenever someone asks.
+  function fastCheck(d) {
+    var s = S(), f = fastState(), r = C().fast;
+    var last = recentQuestions(r.overLast, 1), n = last.length;
+    var acc = n ? last.filter(function (e) { return e.ok; }).length / n : 0;
+    var low = n >= r.overLast && acc < r.closeRight, was = f.open;
+    if (f.open) {
+      if (low) { f.open = false; f.at = d; }
+    } else {
+      var m = (s.mocks || [])[(s.mocks || []).length - 1];
+      var mockOk = !!(m && m.pass && m.right >= r.mockRight && (!f.at || m.d > f.at));
+      if ((n >= r.overLast && acc >= r.openRight) || (mockOk && !low)) { f.open = true; f.at = d; }
+    }
+    if (f.open !== was) PM.store.save();
+    return f;
+  }
+  function fastToday(d) {
+    var f = fastState();
+    return f.run && f.run.date === (d || today()) ? f.run : null;
+  }
+  // The button shows on Done and Today's finished state: open, today's daily run finished, not in
+  // sprint week, and today's round not taken yet (a round already started always continues).
+  function fastAvailable(d) {
+    d = d || today();
+    var s = S(), cur = fastToday(d);
+    if (cur) return !cur.done;
+    if (!fastCheck(d).open || sprint(d)) return false;
+    // Stuck words first: while there are more than the daily run can take, no new round
+    // (simulation: without this, a typical learner's stuck words wait twice as long).
+    if (C().fast.maxStuck != null && stuckIds().length > C().fast.maxStuck) return false;
+    if (!(s.run && s.run.date === d && s.run.done)) return false;
+    return fastDraw(d).length > 0;
+  }
+
+  // Questions only: words not yet met first (in the new-word order), then met-not-mastered words,
+  // weakest first. One question a word. Never a stuck or mastered word, an item waiting as a
+  // repeat, a twin already seen, or anything (item or word) in today's run.
+  function fastDraw(d) {
+    var x = index(), s = S(), cfg = C(), r = cfg.fast, items = s.items, stage = s.stage || 1;
+    var used = {}, blocked = {}, out = [];
+    var pick = picker(items, used, stage, rng('fast' + d), function () { return false; });
+    function block(id) {
+      if (!id || blocked[id]) return;
+      blocked[id] = 1;
+      (x.qByTerm[id] || []).forEach(function (q) { used[q] = 1; });
+    }
+    var stuck = stuckIds();
+    stuck.forEach(function (id) { block(id); (x.qByFocus[id] || []).forEach(function (q) { used[q] = 1; }); });
+    Object.keys(items).forEach(function (id) { if (x.term[id] && isMastered(id, d)) block(id); });
+    var run = s.run && s.run.date === d ? s.run.items : [];
+    run.forEach(function (it) {
+      used[it.id] = 1;
+      if (it.kind === 'word') { block(it.id); return; }
+      var o = itemOf(it.id);
+      if (o) block(o.term_id);
+    });
+    function add(id, o) {
+      if (out.length >= r.questions || blocked[id]) return false;
+      var q = pick.questionFor(id, o);
+      if (!q) return false;
+      used[q] = 1;
+      block(id); block(itemOf(q).term_id);
+      if (x.term[id].part === 5) (x.qByFocus[id] || []).forEach(function (k) { used[k] = 1; });
+      out.push({kind: 'q', id: q, why: 'fast'});
+      return true;
+    }
+    function met(id) { return !!(items[id] && items[id].met); }
+    var wordingLeft = r.newWording;
+    x.wordingNew.forEach(function (id) {
+      if (wordingLeft > 0 && !met(id) && add(id, {drill: false, maxDiff: stage === 1 ? 2 : 0})) wordingLeft--;
+    });
+    x.contentNew.forEach(function (id) { if (!met(id)) add(id, {drill: false, maxDiff: stage === 1 ? 2 : 0}); });
+    weakest(Object.keys(items).filter(function (id) { return x.term[id] && met(id) && !isMastered(id, d) && !items[id].stuck; }), items)
+      .forEach(function (id) { add(id, {drill: false}); });
+    return out;
+  }
+
+  // Today's round, kept in the store like s.run (a refresh resumes it). Created only when
+  // fastAvailable(); null when there is none to take.
+  function fastRun() {
+    var d = today(), f = fastState(), cur = fastToday(d);
+    if (cur) return cur;
+    if (!fastAvailable(d)) return null;
+    f.run = {date: d, fast: true, items: fastDraw(d), i: 0, results: [], taps: 0, hints: 0, done: false,
+      streakAdded: false, masteredAtStart: masteredCount(d), metAtStart: metCount()};
+    PM.store.save();
+    return f.run;
   }
 
   // ---- streak with weekly forgiveness ---------------------------------------------------------
@@ -582,6 +694,7 @@
 
   PM.plan = {
     index: index, draw: draw, todayRun: todayRun, extraRun: extraRun,
+    fastCheck: fastCheck, fastAvailable: fastAvailable, fastDraw: fastDraw, fastRun: fastRun, fastToday: fastToday,
     recordWord: recordWord, recordTap: recordTap, recordChoice: recordChoice,
     isMastered: isMastered, masteredCount: masteredCount, metCount: metCount,
     stuckIds: stuckIds, repeats: repeats, sprint: sprint,

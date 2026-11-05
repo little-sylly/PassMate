@@ -2,7 +2,7 @@
 (function (PM) {
   'use strict';
   PM.config = {
-    version: '0.6.3',            // keep in step with CACHE in sw.js
+    version: '0.7.0',            // keep in step with CACHE in sw.js
     storeKey: 'passmate.v1',
     storeVersion: 2,
     dataFiles: {'zh-Hans': 'data/content.zh-Hans.json', 'zh-Hant': 'data/content.zh-Hant.json'},
@@ -40,7 +40,18 @@
       difficultyMix: {1: 0.3, 2: 0.5, 3: 0.2},   // stages 2-3; stage 1 leans to difficulty 1-2
       offerSnoozeDays: 3,        // after "先不用", ask about the next stage again this many days later
       extraQuestions: 5,         // 再练 5 道错题 after Done
-      logSize: 60                // answers kept for the stage checks
+      logSize: 60,               // answers kept for the stage checks
+
+      // 快速通关 (Sam, 6 Nov): one optional round a day after the daily run, for confident learners.
+      fast: {
+        questions: 10,           // questions only: no word cards, drills or scenario
+        overLast: 20,            // judged on the last 20 question/drill answers in the log
+        openRight: 0.85,         // opens at 85% right or better ...
+        mockRight: 18,           // ... or after a passed mock with 18/20 or better
+        closeRight: 0.75,        // once open, closes only below 75% (no flicker)
+        newWording: 2,           // new question-wording words per round, as in the daily draw
+        maxStuck: 2              // no round while more words are stuck than a daily run takes (plan.maxStuck); null = off
+      }
     },
 
     // Streak: one missed day in any 7 is forgiven.
