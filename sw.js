@@ -1,6 +1,6 @@
 /* PassMate service worker. Bump VERSION whenever a shell file changes (and PM.config.version). */
 'use strict';
-var VERSION = '0.6.1';
+var VERSION = '0.6.2';
 var SHELL = 'passmate-shell-' + VERSION;
 var DATA = 'passmate-data';
 

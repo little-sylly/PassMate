@@ -81,11 +81,14 @@
     return r;
   }
 
-  function trouble(id, d) {
+  // answered: the trouble is a missed answer. Only that wipes a stuck word's squares: 还不熟 on
+  // its card or a tap for help is her own report, and the card is there to re-teach it, so
+  // saying 还不熟 to it each time must not keep it stuck forever (browser test, A141).
+  function trouble(id, d, answered) {
     var r = rec(id);
     addDay(r, 'troubleDays', d);
     r.lastTrouble = d;
-    if (r.stuck) r.stuckRight = [];
+    if (r.stuck) { if (answered) r.stuckRight = []; }
     else if (r.troubleDays.length >= C().stuckDays) { r.stuck = true; r.stuckAt = d; r.stuckRight = []; }
   }
 
@@ -105,7 +108,7 @@
         r.due = D.add(d, boxDays[r.box]);
       }
     } else {
-      trouble(id, d);
+      trouble(id, d, true);
       r.box = 1; r.due = D.add(d, boxDays[1]);
     }
   }
@@ -130,7 +133,7 @@
     meet(id, d);
     if (!knew) {
       r.again = D.add(d, 1);                 // the card itself comes back tomorrow
-      if (metBefore) { trouble(id, d); r.box = 1; r.due = D.add(d, C().boxDays[1]); }
+      if (metBefore) { trouble(id, d, false); r.box = 1; r.due = D.add(d, C().boxDays[1]); }
     } else {
       r.again = null;
       if (cardOnly(id)) termResult(id, true, d);
@@ -142,7 +145,7 @@
   function recordTap(id, d, onCard) {
     var r = rec(id);
     r.taps++;
-    if (!onCard && before(r.met, d)) trouble(id, d);
+    if (!onCard && before(r.met, d)) trouble(id, d, false);
   }
 
   // kind: 'q' | 'drill' | 'scenario'. help = taps + hint on this item. extra = 再练 run.
@@ -263,7 +266,8 @@
     }
 
     // A question (or drill) for term `id`: unseen first at the right difficulty, else the one
-    // seen longest ago. Items waiting as repeat mistakes come back by their own schedule.
+    // seen longest ago. Items waiting as repeat mistakes come back by their own schedule
+    // (o.pending lets one in early: a stuck word whose every question is waiting).
     function questionFor(id, o) {
       o = o || {};
       var t = x.term[id];
@@ -273,7 +277,7 @@
       c = c.concat(t.part === 5 ? (x.qByFocus[id] || []) : (x.qByTerm[id] || []));
       if (!c.length && o.anchor) c = x.qByAnchor[id] || [];
       c = c.filter(function (q) {
-        return !used[q] && !pending(q) && !dupTaken(q) && !(o.maxDiff && (itemOf(q).difficulty || 1) > o.maxDiff);
+        return !used[q] && (o.pending || !pending(q)) && !dupTaken(q) && !(o.maxDiff && (itemOf(q).difficulty || 1) > o.maxDiff);
       });
       if (!c.length) return null;
       var fresh = c.filter(function (q) { return !seen(q); });
@@ -292,22 +296,31 @@
     }
 
     // 1. Stuck words first: the word, a question that uses it, and the words it gets confused with.
-    var stuck = stuckIds().sort(function (a, b) {
+    var dueReps = repeats().filter(function (id) { return items[id].repeat.due <= d; });
+    // Only its own questions and drills can unstick a word (a question that merely underlines
+    // it does not count), so: its missed question when due (one item does both jobs), a fresh
+    // one, one waiting as a repeat, and its drill last (one drill a session). A stuck word with
+    // nothing to answer today waits for the next session rather than showing a card alone.
+    function stuckQuestion(id) {
+      var own = dueReps.filter(function (q) {
+        var it = itemOf(q);
+        return !used[q] && kindOf(q) !== 'scenario' && (it.term_id === id || (it.wording_focus || []).indexOf(id) !== -1);
+      })[0];
+      return own || questionFor(id, {drill: false}) || questionFor(id, {drill: false, pending: true})
+        || questionFor(id) || questionFor(id, {pending: true});
+    }
+    var stuck = [];
+    stuckIds().sort(function (a, b) {
       var ra = items[a], rb = items[b];
       return (ra.stuckShown || '') < (rb.stuckShown || '') ? -1 : (ra.stuckShown || '') > (rb.stuckShown || '') ? 1
         : (ra.stuckAt < rb.stuckAt ? -1 : ra.stuckAt > rb.stuckAt ? 1 : 0);
-    }).slice(0, cfg.maxStuck);
-    var confuseEach = stuck.length > 1 ? 1 : cfg.confusePerStuck;
-    var dueReps = repeats().filter(function (id) { return items[id].repeat.due <= d; });
-    stuck.forEach(function (id) {
-      addWord(id, 'stuck');
-      // Its own missed question when one is due (one item does both jobs), else a fresh one.
-      var own = dueReps.filter(function (q) {
-        var it = itemOf(q);
-        return kindOf(q) !== 'scenario' && (it.term_id === id || (it.wording_focus || []).indexOf(id) !== -1);
-      })[0];
-      addQ(own || questionFor(id, {anchor: true, drill: false}) || questionFor(id, {anchor: true}), 'stuck');
+    }).forEach(function (id) {
+      if (stuck.length >= cfg.maxStuck) return;
+      if (cardOnly(id)) { if (addWord(id, 'stuck')) stuck.push(id); return; }   // its card is its check
+      var q = stuckQuestion(id);
+      if (q && addQ(q, 'stuck')) { addWord(id, 'stuck'); stuck.push(id); }
     });
+    var confuseEach = stuck.length > 1 ? 1 : cfg.confusePerStuck;
     stuck.forEach(function (id) {
       (x.term[id].confuse || []).slice(0, confuseEach).forEach(function (c) { addWord(c, 'confuse'); });
     });
@@ -364,11 +377,18 @@
       x.contentNew.forEach(function (id) {
         if (!(items[id] && items[id].met) && addWord(id, 'new')) newWords.push(id);
       });
-      // Everything met: word cards review the shakiest words.
-      if (words.length < sess.words) weakest(metNotMastered()).forEach(function (id) { addWord(id, 'review'); });
+      // 4. Reviews: a question for the word, and its card too while cards have room (once every
+      // word is met, the cards are all reviews). A review card always comes with its question:
+      // 认识 is her own report, so only a right answer moves the word on (browser test, finding 1).
+      var review = function (id) {
+        if (cardOnly(id)) return addWord(id, 'review');      // the card is its only check
+        if (!addQ(questionFor(id), 'review')) return false;
+        addWord(id, 'review');
+        return true;
+      };
 
-      // 4. Reviews due (Leitner): one question per due word, taking boxes in turn so new
-      // words' first check and older words' longer checks both keep moving.
+      // Leitner reviews due: boxes in turn, so new words' first check and older words' longer
+      // checks both keep moving.
       var due = {1: [], 2: [], 3: []};
       Object.keys(items).forEach(function (id) {
         var r = items[id];
@@ -381,12 +401,14 @@
       while (qs.length < sess.questions && (due[1].length || due[2].length || due[3].length)) {
         var b = [1, 2, 3][turn++ % 3];
         if (!due[b].length) continue;
-        var tid = due[b].shift();
-        if (!addQ(questionFor(tid), 'review') && cardOnly(tid)) addWord(tid, 'review');
+        review(due[b].shift());
       }
 
-      // 5. New questions: today's new words first, then more on words already met.
+      // 5. New questions: today's new words first.
       newWords.forEach(function (id) { addQ(questionFor(id, {maxDiff: stage === 1 ? 2 : 0}), 'new'); });
+      // Cards still free (every word met): the shakiest words, each with a question.
+      if (words.length < sess.words) weakest(metNotMastered()).forEach(function (id) { if (words.length < sess.words) review(id); });
+      // Then more questions on words already met.
       if (qs.length < sess.questions) {
         weakest(metNotMastered()).forEach(function (id) { addQ(questionFor(id), 'more'); });
       }
@@ -412,6 +434,16 @@
         pick = sc[0];
       }
       if (pick) scenario = {kind: 'scenario', id: pick, why: seen(pick) ? 'review' : 'new'};
+    }
+
+    // Cards still free: the words of today's questions and scenario (each already has its question).
+    if (!inSprint && words.length < sess.words) {
+      qs.concat(scenario ? [scenario] : []).forEach(function (q) {
+        var it = itemOf(q.id);
+        [it.term_id].concat(q.kind === 'q' ? it.wording_focus || [] : []).forEach(function (t) {
+          if (items[t] && items[t].met) addWord(t, 'review');
+        });
+      });
     }
 
     return words.concat(qs, scenario ? [scenario] : []);

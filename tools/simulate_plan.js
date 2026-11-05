@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 /* Plan engine check: 30 simulated days of answers on a debug clock.
 
-     node tools/simulate_plan.js [--days 30] [--seed 7] [--quiet]
+     node tools/simulate_plan.js [--days 30] [--seed 7] [--learner typical|weak] [--quiet]
+       [--no-date]            she never sets a test date (pace runs: --days 180 --no-date)
+       [--trace A141]         one line a day for that word (drawn items, box, squares)
+       [--set path=value]     try other numbers, e.g. --set session.questions=8 (repeatable)
 
    Loads the real js/config, store, content, plan and session scripts in a VM (no browser),
    with data/content.zh-Hans.json, and plays a learner who gets better with practice, taps
@@ -14,6 +17,8 @@ var ROOT = path.join(__dirname, '..');
 var args = process.argv.slice(2);
 function arg(name, def) { var i = args.indexOf('--' + name); return i === -1 ? def : args[i + 1]; }
 var DAYS = +arg('days', 30), SEED = +arg('seed', 7), QUIET = args.indexOf('--quiet') !== -1;
+var TRACE = arg('trace', null);                       // --trace A141: one line a day for that word
+var NO_DATE = args.indexOf('--no-date') !== -1;       // pace runs: she never adds a test date
 // typical: about 75% right at first with the Chinese gist; weak: about 60%, to stress the repair paths.
 var LEARNER = arg('learner', 'typical');
 var BASE = {typical: 0.9, weak: 0.8}[LEARNER], SPREAD = {typical: 0.3, weak: 0.35}[LEARNER];
@@ -43,6 +48,14 @@ vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'js', f + '.js'), 'utf8'), sandbox, {filename: f + '.js'});
 });
 var PM = sandbox.PM;
+// --set session.questions=8 --set mastered.rightOnDays=2 ... : try other numbers (pace study).
+args.forEach(function (a, i) {
+  if (a !== '--set') return;
+  var kv = args[i + 1].split('='), keys = kv[0].split('.'), o = PM.config;
+  keys.slice(0, -1).forEach(function (k) { o = o[k]; });
+  o[keys[keys.length - 1]] = JSON.parse(kv[1]);
+});
+var SESS = PM.config.session;
 
 // ---- seeded learner ------------------------------------------------------------------------
 var h = SEED >>> 0;
@@ -88,10 +101,18 @@ function checkDraw(day, d, items, sprint) {
       if (PM.store.get().stage === 1 && it.why === 'new' && q.difficulty > 2) fail(day, 'stage 1 drew difficulty 3 as new: ' + it.id);
     }
   });
-  if (items.length > 11) fail(day, 'session has ' + items.length + ' items');
-  if (c.word > 5 || c.q > 5 || c.scenario > 1) fail(day, 'shape ' + JSON.stringify(c));
-  if (!sprint && (c.word !== 5 || c.q !== 5 || c.scenario !== 1)) fail(day, 'not a full 5/5/1 session: ' + JSON.stringify(c));
+  if (items.length > SESS.words + SESS.questions + SESS.scenarios) fail(day, 'session has ' + items.length + ' items');
+  if (c.word > SESS.words || c.q > SESS.questions || c.scenario > SESS.scenarios) fail(day, 'shape ' + JSON.stringify(c));
+  // Once every word is met, a card needs a question on its word today, so a day whose questions
+  // share words can have a card or two fewer (never fewer than 3).
+  var allMet = PM.plan.metCount() >= PM.config.totalWords;
+  var cardsOk = allMet ? c.word >= SESS.words - 2 : c.word === SESS.words;
+  if (!sprint && (!cardsOk || c.q !== SESS.questions || c.scenario !== SESS.scenarios)) fail(day, 'not a full session: ' + JSON.stringify(c));
   if (sprint && items.some(function (it) { return it.why === 'new' && it.kind === 'word'; })) fail(day, 'new words in sprint week');
+  // A review card always comes with a question on that word (认识 alone never moves it on).
+  items.forEach(function (it) {
+    if (it.kind === 'word' && (it.why === 'review' || it.why === 'stuck') && !reviewedToday(it, items)) fail(day, it.why + ' card ' + it.id + ' has no question on it');
+  });
   if (stuck > cfg.plan.maxStuck) fail(day, stuck + ' stuck words');
   if (drills > cfg.plan.maxDrills) fail(day, drills + ' drills');
   // order: words, then questions, then the scenario
@@ -112,6 +133,113 @@ function checkOverdue(day, d) {
   });
 }
 
+// Does answering this drawn item count for word `id`? (the item's own word, or its wording focus)
+function counts(it, id) {
+  if (it.kind === 'word') return false;
+  var item = PM.plan.itemOf(it.id);
+  return item.term_id === id || (it.kind === 'q' && (item.wording_focus || []).indexOf(id) !== -1);
+}
+
+function cardOnly(id) {
+  return !PM.content.list('questions').some(function (q) { return q.term_id === id || (q.wording_focus || []).indexOf(id) !== -1; }) &&
+    !PM.content.list('drills').some(function (q) { return q.term_id === id; });
+}
+function reviewedToday(card, items) {
+  return cardOnly(card.id) || items.some(function (it) { return counts(it, card.id); });
+}
+
+// Stuck spells: how long each stuck word stays stuck, and on how many of those days the session
+// drew nothing that could unstick it (a question, drill or scenario on that word).
+var spells = {}, longest = [], stuckDays = 0, stuckNoQ = 0;
+function stuckReport(day, items, before) {
+  before.forEach(function (id) {
+    stuckDays++;
+    if (!items.some(function (it) { return counts(it, id); })) stuckNoQ++;
+  });
+  var now = {};
+  PM.plan.stuckIds().forEach(function (id) { now[id] = 1; if (spells[id] == null) spells[id] = day; });
+  Object.keys(spells).forEach(function (id) {
+    if (!now[id]) { longest.push({id: id, from: spells[id], days: day - spells[id], open: false}); delete spells[id]; }
+  });
+}
+function openSpells(day) {
+  return longest.concat(Object.keys(spells).map(function (id) { return {id: id, from: spells[id], days: day - spells[id], open: true}; }))
+    .sort(function (a, b) { return b.days - a.days; });
+}
+
+// Pace: words mastered at the checkpoints (Sam's session-size / mastery-bar decision).
+var PACE_AT = [30, 60, 90, 120, 150, 180], pace = {}, reached = null;
+function paceRow(day, d) {
+  var m = PM.plan.masteredCount(d);
+  if (reached == null && m >= PM.config.readyToSit.wordsMastered) reached = day + 1;
+  if (PACE_AT.indexOf(day + 1) !== -1) pace[day + 1] = {mastered: PM.plan.masteredCount(d), met: PM.plan.metCount(), stuck: PM.plan.stuckIds().length};
+}
+
+// ---- rule checks on a fresh store (after the run; they wipe it) --------------------------------
+function ruleChecks() {
+  var P = PM.plan, n = 0, D = PM.dates, d0 = '2027-03-01';
+  function day(k) { return D.add(d0, k); }
+  function at(k) { var t = D.parse(day(k)); PM.clock.now = function () { return new Date(t.getTime() + 9 * 3600000); }; }
+  function rec(id) { return PM.store.get().items[id] || {}; }
+  function expect(ok, msg) { n++; if (!ok) fail('rule', msg); }
+  function makeStuck(id) {
+    PM.store.reset(); PM.store.set({welcomed: true, stage: 2});
+    P.recordWord(id, true, day(0));
+    [1, 2, 3].forEach(function (k) { P.recordWord(id, false, day(k)); });
+    expect(rec(id).stuck, id + ' should be stuck after 还不熟 on 3 days');
+  }
+  var only = 'A141', q = PM.content.question('PQ082');
+
+  // A141 'only': 还不熟 on the stuck card every time, but the question right on 3 days -> unstuck.
+  makeStuck(only);
+  [4, 5, 6].forEach(function (k) { P.recordWord(only, false, day(k)); P.recordChoice('q', q, true, 0, day(k)); });
+  expect(!rec(only).stuck, 'A141 still stuck after its question was right on 3 days (squares ' + JSON.stringify(rec(only).stuckRight) + ')');
+
+  // A missed answer still wipes the squares (a content word: a miss on a wording focus like
+  // A141's goes to the wording-trap count, by design).
+  var canberra = PM.content.question('PQ018');
+  makeStuck('A017');
+  P.recordChoice('q', canberra, true, 0, day(4)); P.recordChoice('q', canberra, true, 0, day(5)); P.recordChoice('q', canberra, false, 0, day(6));
+  expect(rec('A017').stuck && rec('A017').stuckRight.length === 0, 'a miss should wipe a stuck word\'s squares');
+
+  // Every question on A141 waiting as a repeat mistake (not due yet): the stuck card still gets one.
+  makeStuck(only);
+  ['PQ082', 'PQ139', 'PQ171'].forEach(function (id) { P.recordChoice('q', PM.content.question(id), false, 0, day(4)); });
+  P.recordChoice('drill', PM.content.drill('QW19'), false, 0, day(4));
+  at(4);
+  var dr = P.draw(day(4));
+  expect(dr.some(function (it) { return it.id === only && it.why === 'stuck'; }), 'A141 not drawn while stuck');
+  expect(dr.some(function (it) { return counts(it, only); }), 'stuck A141 drawn with no question on it');
+
+  // 认识 on a review card does not move the Leitner box (only an answer does).
+  PM.store.reset();
+  P.recordWord('A002', true, day(0));
+  var before = JSON.stringify([rec('A002').box, rec('A002').due]);
+  P.recordWord('A002', true, day(5));
+  expect(JSON.stringify([rec('A002').box, rec('A002').due]) === before, '认识 moved A002\'s box: ' + before + ' -> ' + JSON.stringify([rec('A002').box, rec('A002').due]));
+
+  // Every word met: all cards are reviews, each with a question; with nothing due, the same.
+  [true, false].forEach(function (anyDue) {
+    PM.store.reset(); PM.store.set({welcomed: true, stage: 2});
+    PM.content.list('terms').forEach(function (t) { P.recordWord(t.id, true, day(0)); if (!anyDue) rec(t.id).due = day(100); });
+    at(10);
+    var items = P.draw(day(10)), cards = items.filter(function (it) { return it.kind === 'word'; });
+    expect(cards.length === PM.config.session.words, 'all met' + (anyDue ? '' : ', none due') + ': ' + cards.length + ' cards');
+    cards.forEach(function (c) { expect(c.why === 'review' && reviewedToday(c, items), 'all met: card ' + c.id + ' (' + c.why + ') has no question'); });
+  });
+  return n;
+}
+
+var traceRows = [];
+function traceLine(day, d, items) {
+  var r = PM.store.get().items[TRACE] || {};
+  var drawn = items.filter(function (it) { return it.id === TRACE || counts(it, TRACE); })
+    .map(function (it) { return it.kind + ':' + it.id + '(' + it.why + ')'; }).join(' ');
+  return pad(day, 3) + d + '  ' + pad(drawn || '-', 44) + ' box ' + (r.box || '-') + ' due ' + (r.due || '-') +
+    ' right ' + (r.rightDays || []).length + ' trouble ' + (r.troubleDays || []).slice(-3).join(',') +
+    (r.stuck ? '  STUCK right ' + (r.stuckRight || []).length : '') + (PM.plan.isMastered(TRACE, d) ? '  mastered' : '');
+}
+
 // ---- play ------------------------------------------------------------------------------------
 function tally(list, key) {
   var o = {};
@@ -128,7 +256,7 @@ PM.content.load('zh-Hans').then(function () {
     var now = new Date(START.getFullYear(), START.getMonth(), START.getDate() + day);
     PM.clock.now = function () { return new Date(now.getTime() + 9 * 3600000); };
     var d = PM.dates.iso();
-    if (day === DATE_SET_ON) PM.store.set({testDate: PM.dates.add(d, TEST_IN)});
+    if (day === DATE_SET_ON && !NO_DATE) PM.store.set({testDate: PM.dates.add(d, TEST_IN)});
     var st = PM.plan.streak(d);
     streakSeen[day] = st.count;
 
@@ -141,6 +269,7 @@ PM.content.load('zh-Hans').then(function () {
     sandbox.location.hash = '#/session';
     var sprint = PM.plan.sprint(d);
     var run = PM.session.resume();
+    var stuckBefore = PM.plan.stuckIds();
     var c = checkDraw(day, d, run.items, sprint);
     checkOverdue(day, d);
     var stage = PM.store.get().stage;
@@ -192,6 +321,9 @@ PM.content.load('zh-Hans').then(function () {
     }
 
     var s = PM.store.get();
+    stuckReport(day, run.items, stuckBefore);
+    paceRow(day, d);
+    if (TRACE) traceRows.push(traceLine(day, d, run.items));
     rows.push(pad(day, 3) + d + '  st' + stage + (sprint ? ' SPRINT' : '       ') +
       '  streak ' + pad(s.streak.count, 3) +
       ' words[' + pad(tally(run.items.filter(function (x) { return x.kind === 'word'; }), 'why'), 30) + ']' +
@@ -217,7 +349,19 @@ PM.content.load('zh-Hans').then(function () {
   console.log('ready to sit: ' + PM.plan.readiness().list.map(function (c) { return c.key + (c.ok ? ' ✓' : ' ✗'); }).join('  '));
   console.log('learner ' + LEARNER + ', most overdue repeat mistake: ' + maxLate + ' days');
   console.log('store record ' + Math.round(raw.length / 1024) + ' KB');
+  var sp = openSpells(DAYS);
+  console.log('stuck spells ' + sp.length + ', longest: ' + sp.slice(0, 6).map(function (x) { return x.id + ' ' + x.days + 'd' + (x.open ? '+' : ''); }).join(', ') +
+    '; stuck-word days with nothing drawn that could unstick it: ' + stuckNoQ + ' / ' + stuckDays);
+  console.log('pace (mastered / met / stuck): ' + PACE_AT.filter(function (n) { return pace[n]; }).map(function (n) {
+    return 'day ' + n + ' ' + pace[n].mastered + '/' + pace[n].met + '/' + pace[n].stuck; }).join('   ') + '   ' + PM.config.readyToSit.wordsMastered + ' mastered on day ' + (reached || '-') + (NO_DATE ? '   (no test date)' : ''));
+  if (TRACE) { console.log('\ntrace ' + TRACE + ':'); traceRows.forEach(function (r) { console.log(r); }); }
   if (raw.length > 200 * 1024) fail(DAYS, 'store record is ' + Math.round(raw.length / 1024) + ' KB');
+  if (!TRACE) {
+    var nRules = ruleChecks();
+    if (sp[0] && sp[0].days > 28 && LEARNER === 'typical') fail(DAYS, sp[0].id + ' stuck for ' + sp[0].days + ' days');
+    console.log('rule checks: ' + nRules + ' (stuck word clears with 还不熟 on its card, a miss still wipes the squares, ' +
+      'stuck word with every question waiting, 认识 does not move the box, review cards come with questions)');
+  }
   if (failures.length) {
     console.log('\nFAILED (' + failures.length + '):');
     failures.slice(0, 40).forEach(function (f) { console.log('  - ' + f); });
