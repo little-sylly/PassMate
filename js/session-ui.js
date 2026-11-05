@@ -114,17 +114,18 @@
   }
 
   // ---- screen chrome ---------------------------------------------------------------
+  function slot(kind) { return kind === 'drill' ? 'q' : kind; }
   function counts(run) {
     var c = {word: 0, q: 0, scenario: 0};
-    run.items.forEach(function (it) { c[it.kind]++; });
+    run.items.forEach(function (it) { c[slot(it.kind)]++; });
     return c;
   }
 
   function position(run) {
-    var it = run.items[run.i], c = counts(run), n = 0;
-    for (var j = 0; j <= run.i; j++) if (run.items[j].kind === it.kind) n++;
-    var key = it.kind === 'word' ? 'posWord' : it.kind === 'q' ? 'posQuestion' : 'posScenario';
-    return T('session.' + key, {n: n, m: c[it.kind]});
+    var it = run.items[run.i], k = slot(it.kind), c = counts(run), n = 0;
+    for (var j = 0; j <= run.i; j++) if (slot(run.items[j].kind) === k) n++;
+    var key = k === 'word' ? 'posWord' : k === 'q' ? 'posQuestion' : 'posScenario';
+    return T('session.' + key, {n: n, m: c[k]});
   }
 
   function topBar(run) {
@@ -174,7 +175,7 @@
       if (revealed) detail.appendChild(entry(t));
       else detail.appendChild(h('button', {
         class: 'btn btn-quiet', type: 'button',
-        onclick: function () { PM.session.tap(it.id); revealed = true; paint(); }
+        onclick: function () { PM.session.tap(it.id, true); revealed = true; paint(); }
       }, [icon(20, ['M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z', 'M12 15a3 3 0 100-6 3 3 0 000 6z']), ' ' + T('session.showZh')]));
       while (foot.firstChild) foot.removeChild(foot.firstChild);
       if (!picked) {
@@ -194,6 +195,7 @@
     paint();
 
     var main = [
+      whyLine(run, it),
       h('h1', {class: 'headword headword-card' + (head.length > 16 ? ' headword-long' : ''), lang: 'en'}, head),
       t.term !== head ? h('div', {class: 'headword-full', lang: 'en'}, t.term) : null,
       stage > 1 && !revealed ? h('p', {class: 'muted ask'}, T('session.wordAsk')) : null,
@@ -202,18 +204,36 @@
     return frame(run, main, foot, stage);
   }
 
+  // Why this card is in today's session: a stuck word, a word it gets confused with, a review.
+  function whyLine(run, it) {
+    var key = {stuck: 'whyStuck', confuse: 'whyConfuse', again: 'whyAgain', review: 'whyReview', weak: 'whyReview'}[it.why];
+    if (!key) return null;
+    var vars = {};
+    if (it.why === 'confuse') {
+      var stuck = run.items.filter(function (x) {
+        return x.kind === 'word' && x.why === 'stuck' && (PM.content.term(x.id).confuse || []).indexOf(it.id) !== -1;
+      })[0];
+      if (!stuck) return null;
+      vars.word = PM.content.shortTerm(PM.content.term(stuck.id));
+    }
+    return h('div', {class: 'why why-' + it.why}, mixed(T('session.' + key, vars)));
+  }
+
   function nextLabel(run) {
     var cur = run.items[run.i], nxt = run.items[run.i + 1];
     if (!nxt) return T('session.finish');
-    if (cur.kind === 'word') return nxt.kind === 'word' ? T('session.nextWord') : T('session.startQuestions');
-    if (cur.kind === 'q') return nxt.kind === 'q' ? T('session.nextQuestion') : T('session.toScenario');
+    var a = slot(cur.kind), b = slot(nxt.kind);
+    if (a === 'word') return b === 'word' ? T('session.nextWord') : b === 'q' ? T('session.startQuestions') : T('session.toScenario');
+    if (a === 'q') return b === 'q' ? T('session.nextQuestion') : T('session.toScenario');
     return T('session.finish');
   }
 
   // ---- question and scenario (one multiple-choice screen) -----------------------------
-  function choiceScreen(run, it, next, stage) {
-    var isS = it.kind === 'scenario';
-    var item = isS ? PM.content.scenario(it.id) : PM.content.question(it.id);
+  // spec (drills): {item, kind: 'drill' | 'twin', kicker, nextText, onNext, flagId}
+  function choiceScreen(run, it, next, stage, spec) {
+    spec = spec || {};
+    var kind = spec.kind || it.kind, isS = kind === 'scenario';
+    var item = spec.item || (isS ? PM.content.scenario(it.id) : PM.content.question(it.id));
     var a = item.a || {};
     var picked = null, checked = false, hinted = false, seen = {};
     var root = h('div', {class: 'choice'});
@@ -222,8 +242,10 @@
     function en(text, spans) { return anchored(text, spans, tap, seen); }
 
     // The gist (Chinese support): shown at stage 1, behind a button at stage 2, absent at stage 3.
+    // Drills have no gist: their Chinese step (decode) comes first.
     var gistText = isS ? item.scenario_zh : item.gist_zh;
     function gistBlock() {
+      if (!gistText) return null;
       if (stage === 1 || hinted) return h('div', {class: 'gist'}, [h('span', {class: 'gist-label'}, T('session.gistLabel')), mixed(gistText)]);
       if (stage === 2 && !checked) {
         return h('button', {
@@ -277,8 +299,8 @@
           [icon(18, ok ? ['M5 12.5l4.5 4.5L19 7.5'] : ['M7 7l10 10M17 7L7 17']), ok ? T('session.gotIt') : T('session.missed')]),
         h('h2', {class: 'explain-title'}, isS ? T('session.takeaway') : T('session.whyPick', {letter: item.answer})),
         h('p', {class: 'explain-text'}, mixed(isS ? item.takeaway_zh : item.explain_zh)),
-        ok ? null : h('div', {class: 'review-note'}, [icon(18, ['M4 12a8 8 0 108-8 8 8 0 00-5.7 2.4L4 8', 'M4 4v4h4']), T('session.missedNote')]),
-        flagLink(item.id)
+        ok || kind === 'twin' ? null : h('div', {class: 'review-note'}, [icon(18, ['M4 12a8 8 0 108-8 8 8 0 00-5.7 2.4L4 8', 'M4 4v4h4']), T('session.missedNote')]),
+        flagLink(spec.flagId || item.id)
       ]);
     }
 
@@ -287,7 +309,7 @@
       var stem = isS ? [
         h('div', {class: 'kicker'}, T('session.scenarioLabel')),
         h('p', {class: 'situation', lang: 'en'}, en(item.scenario_en, a.s))
-      ] : [h('div', {class: 'kicker'}, T('session.tapNote'))];
+      ] : [h('div', {class: 'kicker'}, spec.kicker || T('session.tapNote'))];
       root.appendChild(h('div', {class: 'stem'}, stem));
       var qEl = h('h1', {class: 'question', lang: 'en', tabindex: '-1'}, en(item.question_en, a.q));
       root.appendChild(qEl);
@@ -303,13 +325,13 @@
           class: 'btn', type: 'button', disabled: picked ? null : true,
           onclick: function () {
             checked = true;
-            PM.session.answerChoice(isS ? 'scenario' : 'q', item, picked, hinted);
+            PM.session.answerChoice(kind, item, picked);
             paint();
             reveal();
           }
         }, T('session.check')));
       } else {
-        foot.appendChild(h('button', {class: 'btn', type: 'button', onclick: next}, nextLabel(run)));
+        foot.appendChild(h('button', {class: 'btn', type: 'button', onclick: spec.onNext || next}, spec.nextText || nextLabel(run)));
       }
     }
 
@@ -326,24 +348,154 @@
     return frame(run, [root], footEl, stage);
   }
 
-  // ---- done ---------------------------------------------------------------------------
+  // ---- wording drill: decode the question in Chinese, then answer it, then its twin -------
+  function drillScreen(run, it, next, stage, swap) {
+    var dr = PM.content.drill(it.id), dc = dr.decode, picked = null, seen = {};
+    var tap = function (id, el) { wordSheet(id, el); };
+    var box = h('div', {class: 'decode'});
+    var foot = h('div', {class: 'foot-inner'});
+
+    function paint() {
+      while (box.firstChild) box.removeChild(box.firstChild);
+      box.appendChild(h('h2', {class: 'decode-q'}, mixed(dc.prompt_zh)));
+      box.appendChild(h('div', {class: 'opts', role: 'group', 'aria-label': dc.prompt_zh}, dc.options_zh.map(function (text, i) {
+        var letter = LETTERS[i], state = !picked ? 'idle' : letter === dc.answer ? 'right' : letter === picked ? 'wrong' : 'dim';
+        var mark = state === 'right' ? h('span', {class: 'opt-mark'}, icon(16, ['M5 12.5l4.5 4.5L19 7.5']))
+          : state === 'wrong' ? h('span', {class: 'opt-mark'}, icon(16, ['M7 7l10 10M17 7L7 17'])) : h('span', {class: 'opt-letter'}, letter);
+        var pick = function () { if (!picked) { picked = letter; paint(); } };
+        return h('div', {class: 'opt opt-' + state, onclick: pick}, [
+          h('button', {class: 'opt-btn', type: 'button', disabled: picked ? true : null, 'aria-label': letter + '：' + text,
+            onclick: function (e) { e.stopPropagation(); pick(); }}, mark),
+          h('div', {class: 'opt-main'}, h('span', {class: 'opt-text'}, mixed(text)))
+        ]);
+      })));
+      if (picked) {
+        box.appendChild(h('div', {class: 'gist', role: 'status'}, [
+          h('span', {class: 'gist-label'}, picked === dc.answer ? T('session.decodeRight') : T('session.decodeWrong')),
+          mixed(dr.tip_zh)
+        ]));
+      }
+      while (foot.firstChild) foot.removeChild(foot.firstChild);
+      foot.appendChild(h('button', {class: 'btn', type: 'button', disabled: picked ? null : true, onclick: answer}, T('session.decodeGo')));
+    }
+
+    function answer() {
+      swap(choiceScreen(run, it, next, stage, {
+        item: dr, kind: 'drill', kicker: T('session.drillAnswer'),
+        nextText: dr.twin ? T('session.twinGo') : null, onNext: dr.twin ? twin : null
+      }));
+    }
+    function twin() {
+      var tw = dr.twin, item = {id: dr.id + '.twin', term_id: dr.term_id, question_en: tw.question_en, options_en: tw.options_en,
+        answer: tw.answer, explain_zh: tw.explain_zh, a: tw.a, chip: tw.chip};
+      swap(choiceScreen(run, it, next, stage, {
+        item: item, kind: 'twin', flagId: dr.id,
+        kicker: T(tw.kind === 'flip' ? 'session.twinFlip' : 'session.twinContrast')
+      }));
+    }
+
+    paint();
+    var main = [
+      h('div', {class: 'kicker'}, T('session.drillKicker')),
+      h('h1', {class: 'question', lang: 'en', tabindex: '-1'}, anchored(dr.question_en, (dr.a || {}).q, tap, seen)),
+      box
+    ];
+    return frame(run, main, foot, stage);
+  }
+
+  // ---- done (A4) ------------------------------------------------------------------------
+  function squares(n, m) {
+    var out = [];
+    for (var k = 0; k < m; k++) out.push(h('span', {class: 'sq' + (k < n ? ' sq-on' : '')}));
+    return h('span', {class: 'squares', 'aria-hidden': 'true'}, out);
+  }
+
+  // Stuck words and wording drills from today's run, each with where it stands now.
+  function tackled(run) {
+    var s = PM.store.get(), need = PM.config.plan.stuckClearDays, rows = [];
+    run.items.forEach(function (it) {
+      if (it.why === 'stuck' && it.kind === 'word') {
+        var r = s.items[it.id] || {}, t = PM.content.term(it.id);
+        var cleared = !r.stuck, n = cleared ? need : (r.stuckRight || []).length;
+        rows.push(h('li', {class: 'tk'}, [
+          h('span', {class: 'tk-text'}, [
+            h('span', {class: 'tk-term', lang: 'en'}, PM.content.shortTerm(t)),
+            h('span', {class: 'tk-sub'}, cleared ? T('session.stuckCleared')
+              : n ? T('session.stuckProgress', {n: n, m: need - n}) : T('session.stuckStart', {m: need}))
+          ]),
+          squares(n, need)
+        ]));
+      }
+    });
+    run.results.forEach(function (r) {
+      var it = run.items[r.i];
+      if (r.kind !== 'drill' || !it || it.why !== 'wording') return;
+      var w = PM.content.term(PM.content.drill(r.id).term_id);
+      rows.push(h('li', {class: 'tk'}, [
+        h('span', {class: 'tk-text'}, [
+          h('span', {class: 'tk-term'}, mixed(T('session.drillRow', {word: PM.content.shortTerm(w)}))),
+          h('span', {class: 'tk-sub'}, r.ok ? T('session.drillOk') : T('session.drillAgain'))
+        ]),
+        r.ok ? h('span', {class: 'tk-ok'}, icon(18, ['M5 12.5l4.5 4.5L19 7.5'])) : null
+      ]));
+    });
+    return rows;
+  }
+
+  // "明天先练 Premier 和 Commonwealth", from a preview of tomorrow's draw.
+  function tomorrowLine(run) {
+    var items = PM.plan.draw(PM.dates.add(run.date, 1));
+    var stuck = items.filter(function (x) { return x.why === 'stuck' && x.kind === 'word'; })
+      .map(function (x) { return PM.content.shortTerm(PM.content.term(x.id)); });
+    if (stuck.length) return T('session.tomorrowStuck', {words: stuck.join(T('session.and'))});
+    var reps = items.filter(function (x) { return x.why === 'repeat'; }).length;
+    if (reps) return T('session.tomorrowRepeat', {n: reps});
+    var fresh = items.filter(function (x) { return x.kind === 'word' && x.why === 'new'; }).length;
+    return fresh ? T('session.tomorrowNew', {n: fresh}) : T('session.tomorrowReview');
+  }
+
   function done(run) {
     var s = PM.store.get();
-    var words = run.results.filter(function (r) { return r.kind === 'word'; });
-    var qs = run.results.filter(function (r) { return r.kind === 'q'; });
+    var qs = run.results.filter(function (r) { return r.kind === 'q' || r.kind === 'drill'; });
     var ss = run.results.filter(function (r) { return r.kind === 'scenario'; });
     function right(a) { return a.filter(function (r) { return r.ok; }).length; }
-    function stat(n, m, label) {
-      return h('div', {class: 'stat'}, [h('div', {class: 'stat-n num'}, m == null ? String(n) : n + ' / ' + m), h('div', {class: 'stat-l'}, label)]);
+    function stat(main, label) {
+      return h('div', {class: 'stat'}, [h('div', {class: 'stat-n num'}, main), h('div', {class: 'stat-l'}, label)]);
     }
-    var wordRows = words.map(function (r) {
-      var t = PM.content.term(r.id);
-      return h('li', {class: 'done-word'}, [
-        h('span', {class: 'done-term', lang: 'en'}, PM.content.shortTerm(t)),
-        h('span', {class: 'done-zh'}, mixed(t.zh)),
-        h('span', {class: 'done-flag' + (r.knew ? ' done-knew' : '')}, r.knew ? T('session.doneKnew') : T('session.doneNew'))
+    var mastered = PM.plan.masteredCount(run.date), gained = Math.max(0, mastered - (run.masteredAtStart || 0));
+    var stats = h('div', {class: 'stats'}, [
+      stat(right(qs) + ' / ' + qs.length, T('session.doneQ')),
+      ss.length ? stat(right(ss) + ' / ' + ss.length, T('session.doneS')) : null,
+      stat(String(mastered), gained ? T('session.doneMasteredUp', {n: gained}) : T('session.doneMastered'))
+    ]);
+    var extraLeft = Math.min(PM.plan.repeats().length, PM.config.plan.extraQuestions);
+    var extraBtn = extraLeft ? h('a', {
+      class: 'btn btn-quiet', href: '#/session?extra=1',
+      onclick: function () { PM.session.startExtra(); }
+    }, T('session.extraGo', {n: extraLeft})) : null;
+    var home = h('a', {class: 'btn', href: '#/today', onclick: function () { PM.session.leave(); }}, T('session.doneHome'));
+
+    if (run.extra) {
+      return h('div', {class: 'page page-plain'}, [
+        h('header', {class: 'cover cover-slim'}, [
+          h('div', {class: 'done-title'}, [h('span', {class: 'done-mark'}, icon(20, ['M5 12.5l4.5 4.5L19 7.5'])), h('h1', null, T('session.extraDone'))])
+        ]),
+        h('main', {class: 'body'}, [stats, h('p', {class: 'fine'}, T('session.extraNote')),
+          h('a', {class: 'btn', href: '#/today', onclick: function () { PM.session.leave(); }}, T('session.home'))])
       ]);
-    });
+    }
+
+    var rows = tackled(run), words = run.results.filter(function (r) { return r.kind === 'word'; });
+    var list = rows.length ? [h('h2', {class: 'section-h'}, T('session.doneTackled')), h('ul', {class: 'tk-list'}, rows)]
+      : [h('h2', {class: 'section-h'}, T('session.doneWords')), h('ul', {class: 'done-words'}, words.map(function (r) {
+        var t = PM.content.term(r.id);
+        return h('li', {class: 'done-word'}, [
+          h('span', {class: 'done-term', lang: 'en'}, PM.content.shortTerm(t)),
+          h('span', {class: 'done-zh'}, mixed(t.zh)),
+          h('span', {class: 'done-flag' + (r.knew ? ' done-knew' : '')}, r.knew ? T('session.doneKnew') : T('session.doneNew'))
+        ]);
+      }))];
+
     return h('div', {class: 'page page-plain'}, [
       h('header', {class: 'cover'}, [
         h('div', {class: 'done-title'}, [h('span', {class: 'done-mark'}, icon(20, ['M5 12.5l4.5 4.5L19 7.5'])), h('h1', null, T('session.doneTitle'))]),
@@ -353,49 +505,46 @@
           PM.views.weekMarks(s)
         ])
       ]),
-      h('main', {class: 'body'}, [
-        h('div', {class: 'stats'}, [
-          stat(right(qs), qs.length, T('session.doneQ')),
-          stat(right(ss), ss.length, T('session.doneS')),
-          stat(run.taps, null, T('session.doneTaps'))
-        ]),
-        h('h2', {class: 'section-h'}, T('session.doneWords')),
-        h('ul', {class: 'done-words'}, wordRows),
-        h('p', {class: 'fine'}, T('session.doneSample')),
-        h('a', {class: 'btn', href: '#/today', onclick: function () { PM.session.leave(); }}, T('session.doneHome'))
-      ])
+      h('main', {class: 'body'}, list.concat([
+        stats,
+        h('p', {class: 'tomorrow'}, mixed(tomorrowLine(run))),
+        home,
+        extraBtn
+      ]))
     ]);
   }
 
   // ---- the route view ---------------------------------------------------------------------
   function view() {
-    var run = PM.session.current();
+    var run = PM.session.resume();
     var stage = PM.session.stage();
     var page = h('div', {class: 'page sess'});
     if (!run.items.length) { PM.router.go('today'); return page; }
 
-    function show() {
-      closeSheet();
-      while (page.firstChild) page.removeChild(page.firstChild);
-      if (run.i >= run.items.length) {
-        if (!run.done) PM.session.finish();
-        page.className = 'page page-plain';
-        page.appendChild(done(run));
-        focusTitle();
-        return;
-      }
-      page.className = 'page sess';
-      var it = run.items[run.i];
-      var parts = it.kind === 'word' ? wordCard(run, it, next, stage) : choiceScreen(run, it, next, stage);
-      parts.forEach(function (p) { page.appendChild(p); });
-      focusTitle();
-      window.scrollTo(0, 0);
-    }
-    function next() { run.i++; show(); }
     function focusTitle() {
       var t = page.querySelector('h1');
       if (t) { t.setAttribute('tabindex', '-1'); t.focus({preventScroll: true}); }
     }
+    function paint(parts, cls) {
+      closeSheet();
+      while (page.firstChild) page.removeChild(page.firstChild);
+      page.className = cls || 'page sess';
+      parts.forEach(function (p) { page.appendChild(p); });
+      focusTitle();
+      window.scrollTo(0, 0);
+    }
+    function show() {
+      if (run.i >= run.items.length) {
+        if (!run.done) PM.session.finish();
+        paint([done(run)], 'page page-plain');
+        return;
+      }
+      var it = run.items[run.i];
+      paint(it.kind === 'word' ? wordCard(run, it, next, stage)
+        : it.kind === 'drill' ? drillScreen(run, it, next, stage, function (parts) { paint(parts); })
+        : choiceScreen(run, it, next, stage));
+    }
+    function next() { PM.session.advance(); show(); }
     show();
     return page;
   }

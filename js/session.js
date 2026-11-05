@@ -1,5 +1,6 @@
-/* Session run: which items, where she is, what she did. Memory only until finished.
-   M2 runs the fixed sample from config; M3 swaps `buildItems` for the plan engine's daily draw. */
+/* Session run: which items, where she is, what she did.
+   The daily run comes from the plan engine and lives in the store (a refresh resumes it);
+   the optional 再练 run lives in memory and never touches the streak. */
 (function (PM) {
   'use strict';
 
@@ -8,60 +9,69 @@
     var m = /[?&]stage=([123])\b/.exec(location.hash || '');
     return m ? +m[1] : (PM.store.get().stage || 1);
   }
+  function wantsExtra() { return /[?&]extra=1\b/.test(location.hash || ''); }
 
-  function buildItems() {
-    var s = PM.config.sample, out = [];
-    s.terms.forEach(function (id) { out.push({kind: 'word', id: id}); });
-    s.questions.forEach(function (id) { out.push({kind: 'q', id: id}); });
-    out.push({kind: 'scenario', id: s.scenario});
-    return out.filter(function (it) {
-      return it.kind === 'word' ? PM.content.term(it.id)
-        : it.kind === 'q' ? PM.content.question(it.id) : PM.content.scenario(it.id);
-    });
+  function exists(it) {
+    var k = it.kind;
+    return k === 'word' ? PM.content.term(it.id) : k === 'q' ? PM.content.question(it.id)
+      : k === 'drill' ? PM.content.drill(it.id) : PM.content.scenario(it.id);
   }
 
-  function rec(id) {
-    var items = PM.store.get().items;
-    return items[id] || (items[id] = {n: 0, right: 0, taps: 0, last: null, lastRight: null, know: null});
-  }
+  var extra = null;
+  var active = null;   // the run on screen: answers go to it even if midnight passes mid-session
 
-  var run = null;
+  function run() { return active || PM.session.current(); }
+
+  // Help used on the item on screen (taps + hint), for the stage-3 check.
+  function cur(r) {
+    if (!r.cur || r.cur.i !== r.i) r.cur = {i: r.i, taps: 0, hint: 0};
+    return r.cur;
+  }
 
   PM.session = {
     stage: stage,
-    // The current run if it is from today and unfinished; otherwise a new one.
     current: function () {
-      var today = PM.dates.iso();
-      if (!run || run.date !== today || run.done) {
-        run = {date: today, items: buildItems(), i: 0, results: [], taps: 0, hints: 0, done: false, streakAdded: false};
-      }
-      return run;
+      if (!wantsExtra()) return PM.plan.todayRun();
+      if (!extra || extra.date !== PM.dates.iso()) extra = PM.plan.extraRun();
+      return extra;
     },
-    leave: function () { run = null; },
+    // On entering the session screen: drop items the content no longer has, and step past an
+    // item answered just before a refresh so it is not shown (or recorded) twice.
+    resume: function () {
+      var r = active = this.current();
+      if (!r.done) {
+        r.items = r.items.filter(exists);
+        while (r.i < r.items.length && r.results.some(function (x) { return x.i === r.i; })) r.i++;
+      }
+      return r;
+    },
+    isExtra: function () { return wantsExtra(); },
+    startExtra: function () { active = extra = PM.plan.extraRun(); },
+    leave: function () { if (active && active.extra) extra = null; active = null; PM.store.save(); },
+    advance: function () { run().i++; PM.store.save(); },
 
-    tap: function (termId) {
-      var r = this.current();
-      r.taps++;
-      rec(termId).taps++;
+    // A tap on an underlined word or the word card's 看中文 (onCard).
+    tap: function (termId, onCard) {
+      var r = run();
+      r.taps++; cur(r).taps++;
+      PM.plan.recordTap(termId, r.date, onCard);
       PM.store.save();
     },
-    hint: function () { this.current().hints++; },
+    hint: function () { var r = run(); r.hints++; cur(r).hint = 1; },
 
     answerWord: function (id, knew) {
-      var it = rec(id), r = this.current();
-      it.n++; it.know = knew; it.last = r.date;
-      r.results.push({kind: 'word', id: id, knew: knew});
+      var r = run();
+      PM.plan.recordWord(id, knew, r.date);
+      r.results.push({i: r.i, kind: 'word', id: id, knew: knew});
       PM.store.save();
     },
-    // picked/answer are letters 'a'..'c'. Records the question and its term.
-    answerChoice: function (kind, item, picked, hintUsed) {
-      var r = this.current(), ok = picked === item.answer, it = rec(item.id);
-      it.n++; if (ok) it.right++; it.last = r.date; it.lastRight = ok;
-      if (item.term_id) {
-        var t = rec(item.term_id);
-        t.n++; if (ok) t.right++; t.last = r.date; t.lastRight = ok;
+    // picked/answer are letters 'a'..'c'. kind: 'q' | 'drill' | 'scenario' | 'twin' (twin: not recorded).
+    answerChoice: function (kind, item, picked) {
+      var r = run(), ok = picked === item.answer, c = cur(r);
+      if (kind !== 'twin') {
+        PM.plan.recordChoice(kind, item, ok, c.taps + c.hint, r.date, !!r.extra);
+        r.results.push({i: r.i, kind: kind, id: item.id, ok: ok, hint: !!c.hint});
       }
-      r.results.push({kind: kind, id: item.id, ok: ok, hint: !!hintUsed});
       PM.store.save();
       return ok;
     },
@@ -71,22 +81,11 @@
       PM.store.save();
     },
 
-    // Mark the day done. Streak: consecutive finished days. The weekly forgiveness is M3.
+    // Mark the day done (the daily run only). The streak forgives one missed day a week.
     finish: function () {
-      var r = this.current(), s = PM.store.get(), today = r.date;
+      var r = run();
       r.done = true;
-      if (!s.streak.days[today]) {
-        s.streak.days[today] = 1;
-        r.streakAdded = true;
-      }
-      var n = 0, d = PM.dates.parse(today);
-      while (true) {
-        var k = PM.dates.iso(d);
-        if (s.streak.days[k]) n++;
-        else if (!s.streak.saved[k]) break;
-        d = new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1);
-      }
-      s.streak.count = n;
+      if (!r.extra) r.streakAdded = PM.plan.finishDay(r.date);
       PM.store.save();
       return r;
     }

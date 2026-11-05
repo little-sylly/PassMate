@@ -43,12 +43,6 @@
     return d ? d.getFullYear() + '年' + (d.getMonth() + 1) + '月' + d.getDate() + '日' : iso;
   }
 
-  function masteredCount() {
-    var items = PM.store.get().items, n = 0;
-    for (var k in items) if (items[k] && items[k].mastered) n++;
-    return n;
-  }
-
   // ---- Welcome --------------------------------------------------------------
   function welcome() {
     return h('div', {class: 'page page-plain'}, [
@@ -179,14 +173,77 @@
     ]);
   }
 
+  // The step up offered when she is ready for less Chinese. She decides.
+  function offerCard(n) {
+    return h('section', {class: 'offer', 'aria-labelledby': 'offer-h'}, [
+      h('h2', {id: 'offer-h', class: 'offer-title'}, T('today.offerTitle')),
+      h('p', {class: 'offer-text'}, T('today.offer' + n)),
+      h('div', {class: 'two'}, [
+        h('button', {class: 'btn btn-quiet', type: 'button', onclick: function () { PM.plan.declineStage(n); PM.router.refresh(); }}, T('today.offerNo')),
+        h('button', {class: 'btn', type: 'button', onclick: function () { PM.plan.acceptStage(n); PM.router.refresh(); }}, T('today.offerYes'))
+      ])
+    ]);
+  }
+
+  // Sprint week (a test date within 7 days); 3 days out, what is still left on the checklist.
+  function sprintNote(s, d) {
+    if (!PM.plan.sprint(d)) return null;
+    var lines = [h('strong', null, T('today.sprint'))];
+    if (PM.dates.daysBetween(d, s.testDate) <= 3) {
+      var r = PM.plan.readiness(d);
+      var left = r.list.filter(function (c) { return !c.ok; }).map(function (c) {
+        return T('ready.' + c.key, {n: PM.config.readyToSit.wordsMastered});
+      });
+      if (left.length) lines.push(h('span', {class: 'sprint-left'}, T('today.sprintLeft', {items: left.join(T('today.listSep'))})));
+    }
+    return h('p', {class: 'sprint'}, lines);
+  }
+
+  // Debug clock pill (#/today?clock=N). Never shown unless the clock was moved.
+  function debugClock(d) {
+    if (!PM.clock.offset) return null;
+    function move(n) { return function () { PM.clock.set(n); PM.router.refresh(); }; }
+    return h('div', {class: 'debug-clock', lang: 'en'}, [
+      h('span', null, 'Debug clock +' + PM.clock.offset + 'd · ' + d),
+      h('button', {type: 'button', onclick: move(PM.clock.offset + 1)}, '+1 day'),
+      h('button', {type: 'button', onclick: move(0)}, 'Reset')
+    ]);
+  }
+
   function today() {
-    var s = PM.store.get(), cfg = PM.config, sample = cfg.sample, stage = s.stage;
-    var mastered = masteredCount(), total = cfg.totalWords;
-    var names = sample.terms.map(function (id) {
-      var t = PM.content.term(id);
-      return t ? PM.content.shortTerm(t) : null;
-    }).filter(Boolean);
-    var wordLine = h('span', {class: 'step-sub', lang: 'en'}, names.join(' · '));
+    var s = PM.store.get(), cfg = PM.config, d = PM.dates.iso();
+    PM.plan.streak(d);                      // a missed day can end the streak without a session
+    var run = PM.plan.todayRun(), stage = s.stage || 1, offer = PM.plan.offer(d);
+    PM.store.save();
+    var mastered = PM.plan.masteredCount(d), total = cfg.totalWords;
+
+    var words = run.items.filter(function (it) { return it.kind === 'word'; });
+    var qs = run.items.filter(function (it) { return it.kind === 'q' || it.kind === 'drill'; });
+    var scen = run.items.filter(function (it) { return it.kind === 'scenario'; });
+    var stuckN = words.filter(function (it) { return it.why === 'stuck'; }).length;
+
+    var wordLine = h('span', {class: 'step-sub', lang: 'en'}, words.map(function (it, i) {
+      var name = PM.content.shortTerm(PM.content.term(it.id));
+      return [i ? ' · ' : '', it.why === 'stuck' ? h('strong', null, name) : name];
+    }));
+    var qBits = [], reps = qs.filter(function (it) { return it.why === 'repeat'; }).length;
+    var drill = qs.filter(function (it) { return it.kind === 'drill'; })[0];
+    if (reps) qBits.push(T('today.repeatSub', {n: reps}));
+    if (drill) qBits.push(T('today.drillSub', {word: PM.content.shortTerm(PM.content.term(PM.content.drill(drill.id).term_id))}));
+    var qLine = h('span', {class: 'step-sub'}, qBits.length ? PM.dom.mixed(qBits.join(' · ')) : T('today.questionsSub'));
+
+    var action;
+    if (run.done) {
+      var extraN = Math.min(PM.plan.repeats().length, cfg.plan.extraQuestions);
+      action = [
+        h('div', {class: 'done-note'}, [h('span', {class: 'done-mark done-mark-ink'}, icon(18, ['M5 12.5l4.5 4.5L19 7.5'])),
+          h('span', null, [h('strong', null, T('today.doneTitle')), h('span', {class: 'done-note-sub'}, T('today.doneSub'))])]),
+        extraN ? h('a', {class: 'btn', href: '#/session?extra=1', onclick: function () { PM.session.startExtra(); }}, T('today.extra', {n: extraN})) : null,
+        h('a', {class: 'btn btn-quiet', href: '#/session'}, T('today.seeResult'))
+      ];
+    } else {
+      action = [h('a', {class: 'btn', href: '#/session'}, run.i > 0 ? T('today.continue') : T('today.start'))];
+    }
 
     return h('div', {class: 'page has-tabs'}, [
       h('header', {class: 'cover'}, [
@@ -211,26 +268,34 @@
       h('div', {class: 'sheet'}, [
         stageTabs(stage),
         h('main', {class: 'body body-tabs'}, [
+          debugClock(d),
+          offer ? offerCard(offer) : null,
           h('div', {class: 'title-row'}, [
             h('h1', null, T('today.title')),
             h('span', {class: 'muted'}, T('today.time'))
           ]),
-          h('ol', {class: 'steps'}, [
-            stepRow(cfg.session.words, T('today.words'), wordLine, h('span', {class: 'tag'}, T('today.sample'))),
-            stepRow(cfg.session.questions, T('today.questions'), h('span', {class: 'step-sub'}, T('today.questionsSub'))),
-            stepRow(cfg.session.scenarios, T('today.scenario'), h('span', {class: 'step-sub'}, T('today.scenarioSub')))
+          h('ol', {class: 'steps' + (run.done ? ' steps-done' : '')}, [
+            stepRow(words.length, T('today.words'), wordLine, stuckN ? h('span', {class: 'tag'}, T('today.stuckTag', {n: stuckN})) : null),
+            stepRow(qs.length, T('today.questions'), qLine),
+            scen.length ? stepRow(scen.length, T('today.scenario'), h('span', {class: 'step-sub'}, T('today.scenarioSub'))) : null
           ]),
-          h('p', {class: 'fine fine-tight'}, T('today.sampleNote')),
-          h('a', {class: 'btn', href: '#/session'}, T('today.start')),
+          sprintNote(s, d)
+        ].concat(action, [
           h('div', {class: 'navlist'}, [
-            navRow(T('today.gate'), stage >= 2 ? T('today.gateSub') : T('today.locksAt'), '#/gate', stage < 2),
-            navRow(T('today.mock'), stage >= 2 ? T('today.mockSub') : T('today.locksAt'), '#/mock', stage < 2),
+            gateRow('gate', stage), gateRow('mock', stage),
             dateRow(s)
           ])
-        ])
+        ]))
       ]),
       tabBar('today')
     ]);
+  }
+
+  // Values gate and mock test rows: open from stage 2 once their screens exist (M4).
+  function gateRow(name, stage) {
+    var built = PM.router.has(name), open = stage >= 2 && built;
+    var sub = stage < 2 ? T('today.locksAt') : built ? T('today.' + name + 'Sub') : T('today.soon');
+    return navRow(T('today.' + name), sub, '#/' + name, !open);
   }
 
   // ---- Placeholder tabs (M5) ---------------------------------------------------

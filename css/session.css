@@ -118,3 +118,28 @@
 .done-zh { flex: 1; min-width: 0; color: var(--muted); font-size: 15px; }
 .done-flag { flex: none; font-size: 13px; color: #B54708; font-weight: 600; }
 .done-knew { color: #17714A; }
+
+/* M3: why a word card is here */
+.why { margin-top: 20px; font-size: 14px; font-weight: 600; color: var(--cover); }
+.why + .headword-card { margin-top: 6px; }
+.why-stuck { display: inline-block; padding: 1px 8px; background: var(--cover); color: #fff; border-radius: 4px; font-size: 13px; }
+
+/* M3: wording drill decode step */
+.decode { margin-top: 4px; }
+.decode-q { margin: 0 0 10px; font-size: 18px; }
+.decode .gist { margin-top: 12px; }
+
+/* M3: done (A4) */
+.tk-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
+.tk { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 64px; padding: 8px 0; border-bottom: 1px solid var(--rule); }
+.tk-text { min-width: 0; }
+.tk-term { display: block; font-size: 18px; font-weight: 700; }
+.tk-sub { display: block; font-size: 14px; line-height: 1.4; color: var(--muted); }
+.squares { display: flex; gap: 4px; flex: none; }
+.sq { width: 16px; height: 16px; border: 1.5px solid var(--cover); border-radius: 3px; }
+.sq-on { background: var(--cover); }
+.tk-ok { width: 26px; height: 26px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #17714A; color: #fff; }
+.tk-ok svg { stroke-width: 2.6; }
+.tk-list + .stats, .done-words + .stats { margin-top: 18px; }
+.tomorrow { margin: 22px 0 0; text-align: center; font-size: 15px; color: var(--muted); }
+.page-plain .body .btn-quiet { margin-top: 10px; }

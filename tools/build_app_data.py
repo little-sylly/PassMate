@@ -61,6 +61,14 @@ REVIEW_ONLY = {"evidence", "fact_en", "en_check", "booklet_checked", "native_rev
 
 UI_STRINGS_FILE = os.path.join(ROOT, "tools", "ui_strings.zh-Hans.json")
 
+# Rednote card quick-checks that deliberately repeat an earlier question
+# (HANDOFF: "deliberate overlaps"). The plan engine draws only one of each pair.
+CARD_DUPS = {"PQ193": "PQ027", "PQ197": "PQ075", "PQ198": "PQ044", "PQ192": "PQ153",
+             "PQ194": "PQ065", "PQ195": "PQ033", "PQ199": "PQ019"}
+CONFUSE_MAX = 3  # words named in a trap note, shown beside a stuck word
+# Trap notes that quote an example rather than name a word to confuse it with.
+CONFUSE_SKIP = {"A040", "A136", "A158"}
+
 # --------------------------------------------------------------------------
 # Anchor matching
 # --------------------------------------------------------------------------
@@ -297,6 +305,18 @@ def build_simplified(content_dir):
     marker = Marker(terms)
     marked_terms = {}  # term id -> count of marks across the content
 
+    # Words a learner confuses with this one: the other terms its trap note names
+    # (Governor -> Governor-General, Premier). Used by the plan engine for stuck words.
+    for t in terms:
+        if t["id"] in CONFUSE_SKIP:
+            continue
+        named = []
+        for sp in marker.spans(t.get("trap", ""), wording=t["part"] == 5):
+            if sp[2] != t["id"] and sp[2] not in named:
+                named.append(sp[2])
+        if named:
+            t["confuse"] = named[:CONFUSE_MAX]
+
     def tally(ids):
         for tid in ids:
             marked_terms[tid] = marked_terms.get(tid, 0) + 1
@@ -317,6 +337,8 @@ def build_simplified(content_dir):
             q.pop("rednote_card", None)
         if q["part"] != 4:  # heading is only used to spread the Part 4 values gate
             q.pop("heading", None)
+        if q["id"] in CARD_DUPS:
+            q["dup"] = CARD_DUPS[q["id"]]
         mark_item(marker, q, q["term_id"], None)
         count(q)
         questions.append(q)

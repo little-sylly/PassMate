@@ -22,6 +22,9 @@
   }
 
   function render() {
+    // Debug clock: #/today?clock=3 moves "today" 3 days on; clock=0 puts it back.
+    var clock = /[?&]clock=(-?\d+)/.exec(location.hash || '');
+    if (clock) { PM.clock.set(+clock[1]); location.replace('#/' + (parse() || 'today')); return; }
     var name = parse();
     var redirect = guard(name);
     if (redirect) { location.replace('#/' + redirect); return; }
@@ -49,6 +52,7 @@
 
   PM.router = {
     define: function (name, fn) { routes[name] = fn; },
+    has: function (name) { return !!routes[name]; },
     start: function (el) {
       rootEl = el;
       window.addEventListener('hashchange', render);

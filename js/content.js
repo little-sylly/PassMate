@@ -48,6 +48,9 @@
     term: function (id) { return maps && maps.terms[id]; },
     question: function (id) { return maps && maps.questions[id]; },
     scenario: function (id) { return maps && maps.scenarios[id]; },
+    drill: function (id) { return maps && maps.drills[id]; },
+    // The loaded item lists ('terms', 'questions', 'drills', 'scenarios'); ids match in both scripts.
+    list: function (k) { return current ? current[k] : []; },
     // "pledge (of commitment)" -> "pledge"; "enrol / enrolment" -> "enrol"
     shortTerm: function (t) { return t.term.replace(/\s*\(.*?\)/g, '').split(' / ')[0]; },
     count: function (k) { return current ? current.meta.counts[k] : 0; }

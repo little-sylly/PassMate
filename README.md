@@ -8,9 +8,10 @@ Not affiliated with the Australian Government. See [CONTENT.md](CONTENT.md).
 
 ## Status
 
-M0 (data pipeline) and M1 (app shell) done: hash router, versioned localStorage record,
-简/繁 toggle, Welcome, Test date and Today (fixed sample session), installable and offline.
-The session screens are next (M2).
+M0 (data pipeline), M1 (app shell), M2 (session screens) and M3 (plan engine) done.
+The daily session is drawn by `js/plan.js`: stuck words and repeat mistakes first,
+Leitner reviews, then new words; stages unlock by mastery; the streak forgives one
+missed day a week; a test date adds a sprint week. Values gate and mock test are next (M4).
 
 ## Run it
 
@@ -20,7 +21,20 @@ No build step. Serve the folder over http (a service worker needs it):
 python -m http.server 8123   # then open http://localhost:8123/
 ```
 
-All tunable numbers (session size, stage thresholds, mock rules) are in `js/config.js`.
+All tunable numbers (session size, stage thresholds, plan rules, mock rules) are in `js/config.js`.
+
+### Checking the plan engine
+
+```
+node tools/simulate_plan.js                  # 30 days, typical learner, one line per day
+node tools/simulate_plan.js --learner weak   # a learner at about 60% right
+node tools/simulate_plan.js --days 90 --quiet
+```
+
+It runs the real scripts in Node with a debug clock and fails on any session that
+breaks a plan rule (shape, duplicates, stuck cap, repeat timing, streak forgiveness).
+In the browser, `#/today?clock=3` moves "today" three days on (a red pill shows it);
+`?clock=0` puts it back.
 When a shell file changes, bump the version in `sw.js` and `js/config.js`.
 Icons are placeholders drawn by `tools/make_icons.py`.
 
@@ -54,3 +68,5 @@ Without `--content-dir` it uses `PASSMATE_CONTENT_DIR`, then
 Each file: `meta`, `ui`, `terms`, `questions`, `drills`, `scenarios`. Items with
 English text carry `a` (anchor spans: `q` stem, `o` one list per option, `s`
 scenario) and `chip: true` when the item's own term is not underlined on screen.
+Terms may carry `confuse` (the terms their trap note names, shown beside a stuck
+word); the Rednote card questions that repeat an earlier question carry `dup`.
