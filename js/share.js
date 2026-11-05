@@ -159,11 +159,63 @@
     return copy(text).then(function (ok) { return ok ? 'copied' : 'failed'; });
   }
 
+  // ---- reminder route ------------------------------------------------------------------------------------
+  // How this phone can take a calendar file:
+  //   'inapp'    WeChat / Rednote / other in-app browsers: no downloads, no data: links. Say so instead.
+  //   'ios-data' iOS Safari tab: a data: link opens "Add to Calendar" (keeps the test-date end).
+  //   'ios-file' iOS home-screen app or another iOS browser (Chrome, Firefox, Edge): they ignore data:
+  //              links, so open a real .ics file from the site (reminder/<script>/HHMM.ics, no end date).
+  //   'download' Android and desktop: a downloaded file that the calendar app opens.
+  function isIOS(ua) {
+    return /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && typeof navigator !== 'undefined' && navigator.maxTouchPoints > 1);
+  }
+  function standalone() {
+    return !!(navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
+  }
+  function reminderRoute(ua, isStandalone) {
+    ua = ua == null ? (navigator.userAgent || '') : ua;
+    if (inApp(ua)) return 'inapp';
+    if (!isIOS(ua)) return 'download';
+    if (isStandalone == null ? standalone() : isStandalone) return 'ios-file';
+    return /CriOS|FxiOS|EdgiOS|OPiOS|GSA\//.test(ua) ? 'ios-file' : 'ios-data';
+  }
+  // Reminder times come in half-hour steps so the site can host one file per time.
+  var SLOT_FROM = 6, SLOT_TO = 23;
+  function reminderSlots() {
+    var out = [];
+    for (var hr = SLOT_FROM; hr <= SLOT_TO; hr++) ['00', '30'].forEach(function (m) { out.push((hr < 10 ? '0' : '') + hr + ':' + m); });
+    return out;
+  }
+  function nearestSlot(t) {
+    var m = /^(\d\d):(\d\d)$/.exec(t || '');
+    if (!m) return '20:00';
+    var mins = +m[1] * 60 + +m[2], best = null, gap = 1e9;
+    reminderSlots().forEach(function (s) {
+      var g = Math.abs(+s.slice(0, 2) * 60 + +s.slice(3) - mins);
+      if (g < gap) { gap = g; best = s; }
+    });
+    return best;
+  }
+  function reminderFile(script, time) { return 'reminder/' + script + '/' + time.replace(':', '') + '.ics'; }
+
+  // -> the route taken. The caller says what happens next (inapp: nothing was saved).
+  function addReminder(o, script) {
+    var route = reminderRoute();
+    if (route === 'inapp') return route;
+    if (route === 'ios-file') {
+      var url = new URL(reminderFile(script, o.time), location.href.split('#')[0]).href;
+      var w = standalone() ? window.open(url, '_blank') : null;
+      if (!w) location.href = url;
+      return route;
+    }
+    PM.share.saveFile('passmate-reminder.ics', 'text/calendar', ics(o));
+    return route;
+  }
+
   function saveFile(name, type, text) {
-    var ua = navigator.userAgent || '', iOS = /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
-    var standalone = navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+    var ua = navigator.userAgent || '';
     // iOS Safari opens a calendar file straight into "Add to Calendar"; a download link does not.
-    if (iOS && !standalone) { location.href = 'data:' + type + ';charset=utf-8,' + encodeURIComponent(text); return; }
+    if (isIOS(ua) && !standalone()) { location.href = 'data:' + type + ';charset=utf-8,' + encodeURIComponent(text); return; }
     var url = URL.createObjectURL(new Blob([text], {type: type + ';charset=utf-8'}));
     var a = document.createElement('a');
     a.href = url; a.download = name; a.style.display = 'none';
@@ -172,5 +224,6 @@
   }
 
   PM.share = {snapshot: snapshot, makeFlag: makeFlag, flagsText: flagsText, ics: ics, inApp: inApp,
-    copy: copy, send: send, saveFile: saveFile};
+    copy: copy, send: send, saveFile: saveFile, reminderRoute: reminderRoute, reminderSlots: reminderSlots,
+    nearestSlot: nearestSlot, reminderFile: reminderFile, addReminder: addReminder};
 })(window.PM = window.PM || {});

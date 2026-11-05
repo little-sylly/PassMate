@@ -394,7 +394,12 @@
 
   function reminderSection() {
     var s = PM.store.get(), rem = s.reminder || {};
-    var time = h('input', {type: 'time', id: 'remind-time', class: 'field field-time', value: rem.time || '20:00'});
+    var picked = PM.share.nearestSlot(rem.time || '20:00');
+    var time = h('select', {id: 'remind-time', class: 'field field-time'}, PM.share.reminderSlots().map(function (t) {
+      var o = h('option', {value: t}, t);
+      if (t === picked) o.selected = true;
+      return o;
+    }));
     var status = h('p', {class: 'rv-status', role: 'status'});
     return setSection(T('settings.remindH'), [
       h('p', {class: 'muted'}, T('settings.remindNote')),
@@ -403,13 +408,14 @@
       h('button', {
         class: 'btn', type: 'button',
         onclick: function () {
-          var st = PM.store.get(), t = /^\d\d:\d\d$/.test(time.value) ? time.value : '20:00', d = PM.dates.iso();
-          var text = PM.share.ics({start: d, time: t, until: st.testDate, title: T('settings.remindTitle'), body: T('settings.remindBody'),
-            url: location.href.split('#')[0]});
+          var st = PM.store.get(), t = PM.share.nearestSlot(time.value), d = PM.dates.iso();
+          var app = PM.share.inApp();
+          if (app) { status.textContent = T('settings.remindInApp', {app: T('banner.' + app)}); return; }
           st.reminder = {offered: (st.reminder && st.reminder.offered) || d, time: t, added: d};
           PM.store.save();
-          status.textContent = T('settings.remindDone');
-          PM.share.saveFile('passmate-reminder.ics', 'text/calendar', text);
+          var route = PM.share.addReminder({start: d, time: t, until: st.testDate, title: T('settings.remindTitle'),
+            body: T('settings.remindBody'), url: location.href.split('#')[0]}, st.script || PM.config.defaultScript);
+          status.textContent = T(route === 'ios-file' ? 'settings.remindDoneNoEnd' : route === 'ios-data' ? 'settings.remindDoneIos' : 'settings.remindDone');
         }
       }, T('settings.remindGo')),
       status,
