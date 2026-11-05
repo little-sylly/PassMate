@@ -8,7 +8,21 @@ Not affiliated with the Australian Government. See [CONTENT.md](CONTENT.md).
 
 ## Status
 
-M0 (data pipeline) done. The app shell is next.
+M0 (data pipeline) and M1 (app shell) done: hash router, versioned localStorage record,
+简/繁 toggle, Welcome, Test date and Today (fixed sample session), installable and offline.
+The session screens are next (M2).
+
+## Run it
+
+No build step. Serve the folder over http (a service worker needs it):
+
+```
+python -m http.server 8123   # then open http://localhost:8123/
+```
+
+All tunable numbers (session size, stage thresholds, mock rules) are in `js/config.js`.
+When a shell file changes, bump the version in `sw.js` and `js/config.js`.
+Icons are placeholders drawn by `tools/make_icons.py`.
 
 ## Data pipeline
 
