@@ -7,5 +7,6 @@ Thumbs.db
 # the private content workshop must never be copied in
 Concepts/
 
-# private session notes waiting to move into the content workshop
-handoff-out/
+# private: project-journey records and the planning docs (never public)
+journey/
+project-docs/
