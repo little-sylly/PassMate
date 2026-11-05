@@ -54,16 +54,18 @@
     if (first) first.focus({preventScroll: true});
   }
 
-  function wordSheet(termId, opener) {
+  // lookOnly: opened from the Review tab, so it is not a tap for help (no trouble day).
+  function wordSheet(termId, opener, lookOnly) {
     var t = PM.content.term(termId);
     if (!t) return;
-    PM.session.tap(termId);
+    if (!lookOnly) PM.session.tap(termId);
     var head = PM.content.shortTerm(t);
     openSheet(head, h('div', {class: 'sheet-body'}, [
       h('div', {class: 'headword-row'}, [h('h2', {class: 'headword' + (head.length > 16 ? ' headword-long' : ''), lang: 'en'}, head),
         t.term !== head ? h('span', {class: 'headword-full', lang: 'en'}, t.term) : null]),
       entry(t),
-      h('button', {class: 'btn btn-quiet sheet-focus', type: 'button', onclick: closeSheet}, T('session.sheetClose'))
+      h('button', {class: 'btn btn-quiet sheet-focus', type: 'button', onclick: closeSheet}, T('session.sheetClose')),
+      flagLink(termId, lookOnly ? 'review' : 'sheet')
     ]), opener);
   }
 
@@ -81,7 +83,7 @@
     ]);
   }
 
-  function flagSheet(itemId, opener) {
+  function flagSheet(itemId, opener, where) {
     var note = h('textarea', {class: 'field note-field', rows: '3', maxlength: '400', 'aria-label': T('session.flagNote'), placeholder: T('session.flagNote')});
     var body = h('div', {class: 'sheet-body'}, [
       h('h2', {class: 'sheet-title'}, T('session.flagTitle')),
@@ -89,7 +91,7 @@
       h('button', {
         class: 'btn', type: 'button',
         onclick: function () {
-          PM.session.flag(itemId, note.value.trim());
+          PM.session.flag(itemId, note.value.trim(), where);
           body.removeChild(note); body.removeChild(save);
           body.appendChild(h('p', {role: 'status'}, T('session.flagSaved')));
           body.appendChild(h('button', {class: 'btn btn-quiet sheet-focus', type: 'button', onclick: closeSheet}, T('session.sheetClose')));
@@ -145,10 +147,11 @@
     ]);
   }
 
-  function flagLink(id) {
+  // where (for Sam's list): card | sheet | q | drill | twin | scenario | gate | mock | review
+  function flagLink(id, where) {
     return h('button', {
       class: 'flag-link', type: 'button',
-      onclick: function (e) { flagSheet(id, e.currentTarget); }
+      onclick: function (e) { flagSheet(id, e.currentTarget, where); }
     }, [icon(16, ['M5 21V4M5 4h11l-2 4 2 4H5']), T('session.flag')]);
   }
 
@@ -172,7 +175,7 @@
 
     function paint() {
       while (detail.firstChild) detail.removeChild(detail.firstChild);
-      if (revealed) detail.appendChild(entry(t));
+      if (revealed) { detail.appendChild(entry(t)); detail.appendChild(flagLink(it.id, 'card')); }
       else detail.appendChild(h('button', {
         class: 'btn btn-quiet', type: 'button',
         onclick: function () { PM.session.tap(it.id, true); revealed = true; paint(); }
@@ -300,7 +303,7 @@
         h('h2', {class: 'explain-title'}, isS ? T('session.takeaway') : T('session.whyPick', {letter: item.answer})),
         h('p', {class: 'explain-text'}, mixed(isS ? item.takeaway_zh : item.explain_zh)),
         ok || kind === 'twin' ? null : h('div', {class: 'review-note'}, [icon(18, ['M4 12a8 8 0 108-8 8 8 0 00-5.7 2.4L4 8', 'M4 4v4h4']), T('session.missedNote')]),
-        flagLink(spec.flagId || item.id)
+        flagLink(spec.flagId || item.id, kind)
       ]);
     }
 
@@ -454,6 +457,18 @@
     return fresh ? T('session.tomorrowNew', {n: fresh}) : T('session.tomorrowReview');
   }
 
+  // After her first finished session: a daily reminder (Settings makes the calendar file).
+  // Offered once; Settings keeps it for later.
+  function reminderOffer(s) {
+    if (s.reminder && s.reminder.offered) return null;
+    s.reminder = {offered: PM.dates.iso(), time: null, added: null};
+    PM.store.save();
+    return h('a', {class: 'nav-row remind-row', href: '#/settings', onclick: function () { PM.session.leave(); }}, [
+      h('span', null, [h('span', {class: 'nav-title'}, T('session.remindOffer')), h('span', {class: 'nav-sub'}, T('session.remindOfferSub'))]),
+      icon(20, ['M9 5l7 7-7 7'])
+    ]);
+  }
+
   function done(run) {
     var s = PM.store.get();
     var qs = run.results.filter(function (r) { return r.kind === 'q' || r.kind === 'drill'; });
@@ -509,7 +524,8 @@
         stats,
         h('p', {class: 'tomorrow'}, mixed(tomorrowLine(run))),
         home,
-        extraBtn
+        extraBtn,
+        reminderOffer(s)
       ]))
     ]);
   }
@@ -550,5 +566,6 @@
   }
 
   // Shared with the gate and mock screens (exam-ui.js).
-  PM.sessionUI = {view: view, openSheet: openSheet, closeSheet: closeSheet, flagLink: flagLink, squares: squares};
+  PM.sessionUI = {view: view, openSheet: openSheet, closeSheet: closeSheet, flagLink: flagLink, squares: squares,
+    wordSheet: wordSheet, entry: entry};
 })(window.PM = window.PM || {});

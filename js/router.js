@@ -4,6 +4,7 @@
   var routes = {};
   var rootEl = null;
   var rendering = 0;
+  var BANNER = {welcome: 1, date: 1, today: 1, review: 1, progress: 1, settings: 1, restore: 1};
 
   function parse() {
     var h = (location.hash || '').replace(/^#\/?/, '').split('?')[0];
@@ -13,6 +14,7 @@
   // Which routes the learner may see yet. Returns the route to use instead, or null.
   function guard(name) {
     var s = PM.store.get();
+    if (name === 'restore' && routes.restore) return null;   // a wiped phone starts on Welcome
     if (!s.welcomed && name !== 'welcome') return 'welcome';
     if (s.welcomed && !s.dateAnswered && name !== 'date' && name !== 'welcome') return 'date';
     if (s.welcomed && name === 'welcome' && s.dateAnswered) return 'today';
@@ -36,6 +38,9 @@
     function paint() {
       if (token !== rendering) return; // a newer navigation took over
       var node = view(name);
+      // In WeChat / Rednote: one closable line on the main pages (not inside a session or test).
+      var bar = BANNER[name] && PM.tabsUI && PM.tabsUI.banner();
+      if (bar) node.insertBefore(bar, node.firstChild);
       PM.dom.mount(rootEl, node);
       window.scrollTo(0, 0);
       var h1 = node.querySelector('h1');

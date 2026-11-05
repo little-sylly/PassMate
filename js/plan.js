@@ -496,6 +496,25 @@
   }
   function acceptStage(n) { PM.store.set({stage: n, offer: null}); }
   function declineStage(n) { PM.store.set({offer: {stage: n, declined: today()}}); }
+  // Settings: one stage back. The step she leaves is snoozed like a "先不用", so Today does
+  // not offer it again the same day.
+  function stepBack() {
+    var s = S(), from = s.stage || 1;
+    if (from <= 1) return from;
+    PM.store.set({stage: from - 1, offer: {stage: from, declined: today()}});
+    return from - 1;
+  }
+  // Where she stands against the next stage's rule (Progress tab). Same numbers as eligible().
+  function stageProgress() {
+    var s = S(), stage = s.stage || 1, rule = PM.config.stages[stage + 1];
+    if (!rule) return {stage: stage, next: null};
+    var last = recentQuestions(rule.overLast, stage);
+    var right = last.length ? last.filter(function (e) { return e.ok; }).length / last.length : 0;
+    var help = last.length ? last.reduce(function (a, e) { return a + (e.h || 0); }, 0) / last.length : 0;
+    return {stage: stage, next: stage + 1, answers: last.length, need: rule.overLast, right: right, minRight: rule.minRight,
+      help: rule.maxTapsPerQuestion != null ? help : null, maxHelp: rule.maxTapsPerQuestion,
+      wordsMet: metCount(), minWordsMet: rule.minWordsMet || 0, ready: eligible(stage + 1)};
+  }
 
   // ---- ready to sit (the checklist; Progress tab in M5) -----------------------------------------
   function readiness(d) {
@@ -517,6 +536,18 @@
     return {ready: list.every(function (c) { return c.ok; }), list: list};
   }
 
+  // Words mastered per booklet part (5 = question wording), for the Progress tab.
+  function masteryByPart(d) {
+    var out = {};
+    PM.content.list('terms').forEach(function (t) {
+      var p = out[t.part] || (out[t.part] = {part: t.part, total: 0, mastered: 0, met: 0});
+      p.total++;
+      if (isMastered(t.id, d)) p.mastered++;
+      if ((peek(t.id) || {}).met) p.met++;
+    });
+    return Object.keys(out).sort().map(function (k) { return out[k]; });
+  }
+
   PM.plan = {
     index: index, draw: draw, todayRun: todayRun, extraRun: extraRun,
     recordWord: recordWord, recordTap: recordTap, recordChoice: recordChoice,
@@ -524,6 +555,7 @@
     stuckIds: stuckIds, repeats: repeats, sprint: sprint,
     streak: streak, finishDay: finishDay,
     eligible: eligible, offer: offer, acceptStage: acceptStage, declineStage: declineStage,
+    stepBack: stepBack, stageProgress: stageProgress, masteryByPart: masteryByPart,
     readiness: readiness, kindOf: kindOf, itemOf: itemOf
   };
 })(window.PM = window.PM || {});

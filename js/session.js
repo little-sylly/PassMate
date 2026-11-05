@@ -75,9 +75,10 @@
       PM.store.save();
       return ok;
     },
-    flag: function (id, note) {
+    // A flag keeps the Chinese she was reading (PM.share.snapshot), so Sam gets the text itself.
+    flag: function (id, note, where) {
       var s = PM.store.get();
-      (s.flags = s.flags || []).push({id: id, script: s.script || PM.config.defaultScript, note: note || '', at: new Date().toISOString()});
+      (s.flags = s.flags || []).push(PM.share.makeFlag(id, note, where));
       PM.store.save();
     },
 

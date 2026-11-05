@@ -6,7 +6,8 @@
   var CAL = [{rect: {x: 3, y: 5, width: 18, height: 16, rx: 2}}, 'M3 10h18M8 3v4M16 3v4'];
 
   // ---- shared pieces ------------------------------------------------------
-  function scriptToggle() {
+  // variant 'light': on a white page (Review, Settings) instead of the navy cover.
+  function scriptToggle(variant) {
     var cur = PM.store.get().script || PM.config.defaultScript;
     function btn(script, key) {
       return h('button', {
@@ -18,7 +19,7 @@
         }
       }, T('script.' + key));
     }
-    return h('div', {class: 'toggle', role: 'group', 'aria-label': T('script.aria')},
+    return h('div', {class: 'toggle' + (variant === 'light' ? ' toggle-light' : ''), role: 'group', 'aria-label': T('script.aria')},
       [btn('zh-Hans', 'hans'), btn('zh-Hant', 'hant')]);
   }
 
@@ -32,9 +33,11 @@
       ['review', ['M5 4h11l3 3v13H5z', 'M9 11h6M9 15h4']],
       ['progress', ['M5 19V11M12 19V6M19 19v-5']]
     ];
+    var reps = PM.plan.repeats().length;   // 复习 · 6: missed items waiting to come back
     return h('nav', {class: 'tabbar', 'aria-label': T('tabs.aria')}, tabs.map(function (t) {
+      var label = T('tabs.' + t[0]) + (t[0] === 'review' && reps ? ' · ' + reps : '');
       return h('a', {href: '#/' + t[0], 'aria-current': active === t[0] ? 'page' : null},
-        [icon(24, t[1]), T('tabs.' + t[0])]);
+        [icon(24, t[1]), label]);
     }));
   }
 
@@ -64,6 +67,7 @@
             PM.router.go('date');
           }
         }, T('welcome.start')),
+        h('a', {class: 'link-btn', href: '#/restore'}, T('restore.welcomeLink')),
         h('p', {class: 'fine'}, T('app.notAffiliated')),
         h('p', {class: 'fine'}, T('app.credit'))
       ])
@@ -298,18 +302,6 @@
     return navRow(T('today.' + name), sub, '#/' + name, !open);
   }
 
-  // ---- Placeholder tabs (M5) ---------------------------------------------------
-  function soon(name) {
-    return h('div', {class: 'page has-tabs'}, [
-      h('header', {class: 'cover cover-slim'}, [topRow()]),
-      h('main', {class: 'body'}, [
-        h('h1', null, T('soon.title')), h('p', null, T('soon.body')),
-        h('a', {class: 'btn btn-quiet', href: '#/today'}, T('soon.back'))
-      ]),
-      tabBar(name)
-    ]);
-  }
-
   // ---- Load error (strings may not be loaded, so these are fixed) --------------
   function loadError(retry) {
     return h('div', {class: 'page page-plain'}, [h('main', {class: 'body'}, [
@@ -319,6 +311,6 @@
     ])]);
   }
 
-  PM.views = {welcome: welcome, date: testDate, today: today, session: function () { return PM.sessionUI.view(); }, soon: soon,
-    loadError: loadError, weekMarks: weekMarks, topRow: topRow};
+  PM.views = {welcome: welcome, date: testDate, today: today, session: function () { return PM.sessionUI.view(); },
+    loadError: loadError, weekMarks: weekMarks, topRow: topRow, tabBar: tabBar, scriptToggle: scriptToggle, formatDate: formatDate};
 })(window.PM = window.PM || {});

@@ -9,8 +9,10 @@
   PM.router.define('session', PM.views.session);
   PM.router.define('gate', PM.examUI.gate);
   PM.router.define('mock', PM.examUI.mock);
-  PM.router.define('review', function () { return PM.views.soon('review'); });
-  PM.router.define('progress', function () { return PM.views.soon('progress'); });
+  PM.router.define('review', PM.tabsUI.review);
+  PM.router.define('progress', PM.tabsUI.progress);
+  PM.router.define('settings', PM.tabsUI.settings);
+  PM.router.define('restore', PM.tabsUI.restore);
   PM.router.start(document.getElementById('app'));
 
   // Offline: register after load so it never competes with first paint.

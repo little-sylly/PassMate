@@ -33,7 +33,7 @@ except ImportError:  # pragma: no cover
     sys.exit("OpenCC is missing: pip install opencc")
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MAX_BYTES = 400 * 1024
+MAX_BYTES = 440 * 1024  # raised from 400 KB in M5 (session 19): interface strings for Review, Progress, Settings
 
 # --------------------------------------------------------------------------
 # What the app keeps (whitelists)

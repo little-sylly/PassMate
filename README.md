@@ -43,6 +43,14 @@ three runs in a row, weekly re-check):
 node tools/check_exam.js
 ```
 
+Backup and restore (30 simulated days with gate and mock history, backed up, restored
+into a fresh store and deep-compared), the flag export, the reminder .ics and the
+in-app browser check:
+
+```
+node tools/check_backup.js
+```
+
 In the browser, `#/today?clock=3` moves "today" three days on (a red pill shows it);
 `?clock=0` puts it back.
 When a shell file changes, bump the version in `sw.js` and `js/config.js`.
@@ -62,7 +70,7 @@ separate, private content workshop), then:
 5. checks the result and prints an anchor coverage report. The build fails on
    duplicate or unknown IDs, an answer that is not a/b/c, an empty Chinese
    field, a Traditional field that is identical to its Simplified text, a
-   review-only field in the output, or a file over 400 KB.
+   review-only field in the output, or a file over 440 KB.
 
 ```
 pip install opencc

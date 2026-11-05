@@ -53,6 +53,7 @@
     list: function (k) { return current ? current[k] : []; },
     // "pledge (of commitment)" -> "pledge"; "enrol / enrolment" -> "enrol"
     shortTerm: function (t) { return t.term.replace(/\s*\(.*?\)/g, '').split(' / ')[0]; },
-    count: function (k) { return current ? current.meta.counts[k] : 0; }
+    count: function (k) { return current ? current.meta.counts[k] : 0; },
+    meta: function () { return current ? current.meta : null; }
   };
 })(window.PM = window.PM || {});

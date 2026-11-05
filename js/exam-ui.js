@@ -271,7 +271,7 @@
           h('div', {class: 'miss-pick miss-right'}, [h('span', {class: 'miss-label'}, T('exam.rightAnswer')),
             h('span', {lang: 'en'}, q.options_en[LETTERS.indexOf(q.answer)])]),
           h('p', {class: 'explain-text'}, mixed(q.explain_zh)),
-          U().flagLink(q.id)
+          U().flagLink(q.id, res.kind)
         ]);
       })),
       h('div', {class: 'review-note'}, [icon(18, ['M4 12a8 8 0 108-8 8 8 0 00-5.7 2.4L4 8', 'M4 4v4h4']), T('exam.missedNote')])

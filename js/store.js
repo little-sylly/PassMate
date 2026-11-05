@@ -24,7 +24,10 @@
       run: null,             // today's session: the draw plus where she is in it
       gate: {inARow: 0, cleared: false, clearedAt: null, lastCheck: null, reopened: null, used: [], run: null, history: []},
       mock: null,            // the mock test in progress (see PM.exam)
-      mocks: []              // finished mocks {d, right, total, values, valuesTotal, pass, english, secs, timeUp}
+      mocks: [],             // finished mocks {d, right, total, values, valuesTotal, pass, english, secs, timeUp}
+      flags: [],             // her Chinese-text flags {id, script, note, at, where, en, zh: [[field, text]], sent}
+      banner: null,          // 'YYYY-MM-DD' when she closed the in-app browser banner
+      reminder: null         // {offered, time, added} for the daily .ics reminder
     };
   }
 
@@ -87,7 +90,10 @@
       return s;
     },
     save: function () { this.get(); write(); },
-    reset: function () { state = fresh(); write(); }
+    reset: function () { state = fresh(); write(); },
+    // Restore from a backup: the record goes through the same migration as a stored one.
+    replace: function (rec) { state = migrate(rec); write(); return state; },
+    migrate: function (rec) { return migrate(rec); }
   };
 
   // Debug clock: shifts "today" by whole days so 30 days can be tried in one sitting.
