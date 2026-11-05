@@ -2,7 +2,7 @@
 (function (PM) {
   'use strict';
   PM.config = {
-    version: '0.2.0',            // keep in step with CACHE in sw.js
+    version: '0.2.1',            // keep in step with CACHE in sw.js
     storeKey: 'passmate.v1',
     storeVersion: 1,
     dataFiles: {'zh-Hans': 'data/content.zh-Hans.json', 'zh-Hant': 'data/content.zh-Hant.json'},

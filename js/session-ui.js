@@ -6,14 +6,18 @@
   var LETTERS = ['a', 'b', 'c'];
 
   // ---- anchored English text: underline the spans, each a tap target ----------------
-  function anchored(text, spans, onTap) {
+  // Spans, not <button>s: a button is an atomic box, so a long term ("Aboriginal and Torres
+  // Strait Islander peoples") could not wrap with the sentence. `seen` keeps the tapped tint.
+  function anchored(text, spans, onTap, seen) {
     var out = [], pos = 0;
     (spans || []).slice().sort(function (a, b) { return a[0] - b[0]; }).forEach(function (sp) {
       if (sp[0] < pos || sp[1] > text.length || !PM.content.term(sp[2])) return;
       if (sp[0] > pos) out.push(text.slice(pos, sp[0]));
-      out.push(h('button', {
-        class: 'anchor', type: 'button',
-        onclick: function (e) { e.stopPropagation(); onTap(sp[2], e.currentTarget); }
+      var go = function (e) { e.stopPropagation(); if (seen) seen[sp[2]] = 1; e.currentTarget.classList.add('anchor-seen'); onTap(sp[2], e.currentTarget); };
+      out.push(h('span', {
+        class: 'anchor' + (seen && seen[sp[2]] ? ' anchor-seen' : ''), role: 'button', tabindex: '0',
+        onclick: go,
+        onkeydown: function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(e); } }
       }, text.slice(sp[0], sp[1])));
       pos = sp[1];
     });
@@ -56,7 +60,7 @@
     PM.session.tap(termId);
     var head = PM.content.shortTerm(t);
     openSheet(head, h('div', {class: 'sheet-body'}, [
-      h('div', {class: 'headword-row'}, [h('h2', {class: 'headword', lang: 'en'}, head),
+      h('div', {class: 'headword-row'}, [h('h2', {class: 'headword' + (head.length > 16 ? ' headword-long' : ''), lang: 'en'}, head),
         t.term !== head ? h('span', {class: 'headword-full', lang: 'en'}, t.term) : null]),
       entry(t),
       h('button', {class: 'btn btn-quiet sheet-focus', type: 'button', onclick: closeSheet}, T('session.sheetClose'))
@@ -147,9 +151,15 @@
     }, [icon(16, ['M5 21V4M5 4h11l-2 4 2 4H5']), T('session.flag')]);
   }
 
-  // `foot` = array of nodes pinned to the bottom
-  function frame(run, main, foot) {
-    return [topBar(run), h('main', {class: 'sess-main'}, main), h('div', {class: 'foot'}, foot)];
+  // The current stage as one thumb-index tab on the right edge (A2).
+  function stageTab(stage) {
+    return h('div', {class: 'stages sess-stage', role: 'note', 'aria-label': T('stages.aria') + '：' + T('stages.' + stage)},
+      [h('div', {class: 'stage stage-on', 'aria-hidden': 'true'}, T('stages.' + stage))]);
+  }
+
+  // `foot` = node pinned to the bottom
+  function frame(run, main, foot, stage) {
+    return [topBar(run), h('main', {class: 'sess-main'}, [stageTab(stage)].concat(main)), h('div', {class: 'foot'}, foot)];
   }
 
   // ---- word card -------------------------------------------------------------------
@@ -184,12 +194,12 @@
     paint();
 
     var main = [
-      h('h1', {class: 'headword headword-card', lang: 'en'}, head),
+      h('h1', {class: 'headword headword-card' + (head.length > 16 ? ' headword-long' : ''), lang: 'en'}, head),
       t.term !== head ? h('div', {class: 'headword-full', lang: 'en'}, t.term) : null,
       stage > 1 && !revealed ? h('p', {class: 'muted ask'}, T('session.wordAsk')) : null,
       detail
     ];
-    return [topBar(run), h('main', {class: 'sess-main'}, main), h('div', {class: 'foot'}, foot)];
+    return frame(run, main, foot, stage);
   }
 
   function nextLabel(run) {
@@ -205,10 +215,11 @@
     var isS = it.kind === 'scenario';
     var item = isS ? PM.content.scenario(it.id) : PM.content.question(it.id);
     var a = item.a || {};
-    var picked = null, checked = false, hinted = false;
+    var picked = null, checked = false, hinted = false, seen = {};
     var root = h('div', {class: 'choice'});
 
     function tap(id, el) { wordSheet(id, el); }
+    function en(text, spans) { return anchored(text, spans, tap, seen); }
 
     // The gist (Chinese support): shown at stage 1, behind a button at stage 2, absent at stage 3.
     var gistText = isS ? item.scenario_zh : item.gist_zh;
@@ -229,8 +240,8 @@
       if (checked) state = letter === item.answer ? 'right' : letter === picked ? 'wrong' : 'dim';
       else if (letter === picked) state = 'picked';
       var tag = checked && letter === item.answer ? T('session.correct') : checked && letter === picked ? T('session.yourPick') : null;
-      var mark = state === 'right' ? icon(22, ['M5 12.5l4.5 4.5L19 7.5'], 'opt-icon')
-        : state === 'wrong' ? icon(22, ['M6 6l12 12M18 6L6 18'], 'opt-icon') : h('span', {class: 'opt-letter'}, letter);
+      var mark = state === 'right' ? h('span', {class: 'opt-mark'}, icon(16, ['M5 12.5l4.5 4.5L19 7.5']))
+        : state === 'wrong' ? h('span', {class: 'opt-mark'}, icon(16, ['M7 7l10 10M17 7L7 17'])) : h('span', {class: 'opt-letter'}, letter);
       var pick = function () { if (!checked) { picked = letter; paint(); } };
       var row = h('div', {class: 'opt opt-' + (state || 'idle'), onclick: pick}, [
         h('button', {
@@ -239,11 +250,10 @@
           'aria-label': T('session.optionAria', {letter: letter, text: text}), onclick: function (e) { e.stopPropagation(); pick(); }
         }, mark),
         h('div', {class: 'opt-main'}, [
-          isS && tag ? h('span', {class: 'opt-tag opt-tag-top'}, tag) : null,
-          h('span', {class: 'opt-text', lang: 'en'}, anchored(text, a.o && a.o[i], tap)),
+          tag ? h('span', {class: 'opt-tag opt-tag-top'}, tag) : null,
+          h('span', {class: 'opt-text', lang: 'en'}, en(text, a.o && a.o[i])),
           isS && checked ? h('p', {class: 'opt-why'}, mixed(item.why_zh[i])) : null
         ]),
-        !isS && tag ? h('span', {class: 'opt-tag'}, tag) : null
       ]);
       return row;
     }
@@ -258,34 +268,33 @@
       ]);
     }
 
+    // Verdict, explanation and the review note read as one block under the options (A3).
+    // The flag link sits at its end, not in the pinned footer, so the footer stays one button tall.
     function feedback() {
       var ok = picked === item.answer;
-      var nodes = [h('div', {class: 'verdict ' + (ok ? 'verdict-ok' : 'verdict-bad'), role: 'status'}, ok ? T('session.gotIt') : T('session.missed'))];
-      if (isS) {
-        nodes.push(h('div', {class: 'explain'}, [h('h2', {class: 'explain-title'}, T('session.takeaway')), h('p', null, mixed(item.takeaway_zh))]));
-      } else {
-        nodes.push(h('div', {class: 'explain'}, [
-          h('h2', {class: 'explain-title'}, T('session.whyPick', {letter: item.answer})),
-          h('p', null, mixed(item.explain_zh))
-        ]));
-      }
-      if (!ok) nodes.push(h('div', {class: 'review-note'}, [icon(18, ['M4 12a8 8 0 108-8 8 8 0 00-5.7 2.4L4 8', 'M4 4v4h4']), T('session.missedNote')]));
-      return nodes;
+      return h('section', {class: 'explain'}, [
+        h('div', {class: 'verdict ' + (ok ? 'verdict-ok' : 'verdict-bad'), role: 'status'},
+          [icon(18, ok ? ['M5 12.5l4.5 4.5L19 7.5'] : ['M7 7l10 10M17 7L7 17']), ok ? T('session.gotIt') : T('session.missed')]),
+        h('h2', {class: 'explain-title'}, isS ? T('session.takeaway') : T('session.whyPick', {letter: item.answer})),
+        h('p', {class: 'explain-text'}, mixed(isS ? item.takeaway_zh : item.explain_zh)),
+        ok ? null : h('div', {class: 'review-note'}, [icon(18, ['M4 12a8 8 0 108-8 8 8 0 00-5.7 2.4L4 8', 'M4 4v4h4']), T('session.missedNote')]),
+        flagLink(item.id)
+      ]);
     }
 
     function paint() {
       while (root.firstChild) root.removeChild(root.firstChild);
       var stem = isS ? [
         h('div', {class: 'kicker'}, T('session.scenarioLabel')),
-        h('p', {class: 'situation', lang: 'en'}, anchored(item.scenario_en, a.s, tap))
+        h('p', {class: 'situation', lang: 'en'}, en(item.scenario_en, a.s))
       ] : [h('div', {class: 'kicker'}, T('session.tapNote'))];
       root.appendChild(h('div', {class: 'stem'}, stem));
-      var qEl = h('h1', {class: 'question', lang: 'en', tabindex: '-1'}, anchored(item.question_en, a.q, tap));
+      var qEl = h('h1', {class: 'question', lang: 'en', tabindex: '-1'}, en(item.question_en, a.q));
       root.appendChild(qEl);
       var g = gistBlock(); if (g) root.appendChild(g);
       var c = chip(); if (c) root.appendChild(c);
       root.appendChild(h('div', {class: 'opts', role: 'group', 'aria-label': T('session.scenarioQ')}, item.options_en.map(function (_, i) { return optionRow(i); })));
-      if (checked) feedback().forEach(function (n) { root.appendChild(n); });
+      if (checked) root.appendChild(feedback());
 
       var foot = footEl;
       while (foot.firstChild) foot.removeChild(foot.firstChild);
@@ -296,19 +305,25 @@
             checked = true;
             PM.session.answerChoice(isS ? 'scenario' : 'q', item, picked, hinted);
             paint();
-            var v = root.querySelector('.verdict');
-            if (v) v.scrollIntoView({block: 'nearest'});
+            reveal();
           }
         }, T('session.check')));
       } else {
         foot.appendChild(h('button', {class: 'btn', type: 'button', onclick: next}, nextLabel(run)));
-        foot.appendChild(flagLink(item.id));
       }
+    }
+
+    // After checking: a scenario's per-option whys are long, so bring the options to the top;
+    // a question keeps its stem in view and only scrolls far enough to show the explanation.
+    function reveal() {
+      var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var target = isS ? root.querySelector('.opts') : root.querySelector('.explain-title');
+      if (target) target.scrollIntoView({block: isS ? 'start' : 'nearest', behavior: calm ? 'auto' : 'smooth'});
     }
 
     var footEl = h('div', {class: 'foot-inner'});
     paint();
-    return [topBar(run), h('main', {class: 'sess-main'}, root), h('div', {class: 'foot'}, footEl)];
+    return frame(run, [root], footEl, stage);
   }
 
   // ---- done ---------------------------------------------------------------------------
@@ -331,7 +346,7 @@
     });
     return h('div', {class: 'page page-plain'}, [
       h('header', {class: 'cover'}, [
-        h('div', {class: 'done-title'}, [icon(30, ['M5 12.5l4.5 4.5L19 7.5']), h('h1', null, T('session.doneTitle'))]),
+        h('div', {class: 'done-title'}, [h('span', {class: 'done-mark'}, icon(20, ['M5 12.5l4.5 4.5L19 7.5'])), h('h1', null, T('session.doneTitle'))]),
         h('div', {class: 'cover-muted done-streak-label'}, run.streakAdded ? T('session.doneStreak') : T('session.doneStreakAgain')),
         h('div', {class: 'streak-row'}, [
           h('div', {class: 'streak'}, [h('span', {class: 'streak-n'}, String(s.streak.count)), h('span', {class: 'streak-u'}, T('today.days'))]),
