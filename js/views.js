@@ -233,30 +233,6 @@
     ]);
   }
 
-  // ---- Session stub (M2 replaces this) ---------------------------------------
-  function session() {
-    var sample = PM.config.sample;
-    var words = sample.terms.map(function (id) {
-      var t = PM.content.term(id);
-      return t ? h('li', null, [h('span', {lang: 'en', class: 'en-strong'}, PM.content.shortTerm(t)), ' ' + t.zh]) : null;
-    });
-    var qs = sample.questions.map(function (id) {
-      var q = PM.content.question(id);
-      return q ? h('li', {lang: 'en'}, q.question_en) : null;
-    });
-    return h('div', {class: 'page has-tabs'}, [
-      h('header', {class: 'cover cover-slim'}, [topRow()]),
-      h('main', {class: 'body'}, [
-        h('h1', null, T('session.title')),
-        h('p', null, T('session.body')),
-        h('p', {class: 'muted'}, T('session.plan')),
-        h('ul', {class: 'plain-list'}, words), h('ol', {class: 'plain-list'}, qs),
-        h('a', {class: 'btn btn-quiet', href: '#/today'}, T('session.back'))
-      ]),
-      tabBar('today')
-    ]);
-  }
-
   // ---- Placeholder tabs (M5) ---------------------------------------------------
   function soon(name) {
     return h('div', {class: 'page has-tabs'}, [
@@ -278,5 +254,6 @@
     ])]);
   }
 
-  PM.views = {welcome: welcome, date: testDate, today: today, session: session, soon: soon, loadError: loadError};
+  PM.views = {welcome: welcome, date: testDate, today: today, session: function () { return PM.sessionUI.view(); }, soon: soon,
+    loadError: loadError, weekMarks: weekMarks};
 })(window.PM = window.PM || {});

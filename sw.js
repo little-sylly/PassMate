@@ -1,12 +1,12 @@
 /* PassMate service worker. Bump VERSION whenever a shell file changes (and PM.config.version). */
 'use strict';
-var VERSION = '0.1.0';
+var VERSION = '0.2.0';
 var SHELL = 'passmate-shell-' + VERSION;
 var DATA = 'passmate-data';
 
 var SHELL_FILES = [
-  './', 'index.html', 'manifest.webmanifest', 'css/app.css',
-  'js/config.js', 'js/dom.js', 'js/store.js', 'js/content.js', 'js/router.js', 'js/views.js', 'js/app.js',
+  './', 'index.html', 'manifest.webmanifest', 'css/app.css', 'css/session.css',
+  'js/config.js', 'js/dom.js', 'js/store.js', 'js/content.js', 'js/router.js', 'js/session.js', 'js/session-ui.js', 'js/views.js', 'js/app.js',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'
 ];
 
