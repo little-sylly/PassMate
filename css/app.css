@@ -51,7 +51,7 @@ h1:focus { outline: none; }
 
 .toggle { display: flex; border: 1px solid rgba(255,255,255,.55); border-radius: 6px; overflow: hidden; }
 .toggle button {
-  min-width: 48px; height: 36px; border: 0; background: transparent; color: #fff; font-size: 15px; cursor: pointer;
+  min-width: 48px; height: 44px; border: 0; background: transparent; color: #fff; font-size: 15px; cursor: pointer;
 }
 .toggle button[aria-pressed="true"] { background: #fff; color: var(--cover); font-weight: 600; }
 
@@ -101,7 +101,7 @@ h1:focus { outline: none; }
 .step-num { width: 32px; font-size: 26px; font-weight: 700; color: var(--cover); font-variant-numeric: tabular-nums; }
 .step-text { flex: 1; min-width: 0; }
 .step-title { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 600; }
-.step-sub { display: block; margin-top: 2px; font-size: 14px; line-height: 1.4; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.step-sub { display: block; margin-top: 2px; font-size: 14px; line-height: 1.4; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .tag { padding: 1px 6px; border: 1px solid var(--cover); border-radius: 4px; color: var(--cover); font-size: 12px; font-weight: 600; }
 
 .points { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
@@ -175,7 +175,7 @@ h1:focus { outline: none; }
 .toggle-light { border-color: var(--cover); }
 .toggle-light button { color: var(--cover); }
 .toggle-light button[aria-pressed="true"] { background: var(--cover); color: #fff; }
-.back-link { display: inline-flex; align-items: center; gap: 4px; min-height: 40px; margin-bottom: 2px; color: var(--cover); font-size: 15px; text-decoration: none; }
+.back-link { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; min-width: 44px; margin-bottom: 2px; color: var(--cover); font-size: 15px; text-decoration: none; }
 .sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding-top: 18px; }
 .sec-title { margin: 0; font-size: 18px; font-weight: 700; }
 .sec-note { flex: none; font-size: 13px; color: var(--muted); }
@@ -276,6 +276,7 @@ h1:focus { outline: none; }
 .field-time { width: auto; min-width: 140px; }
 .switch { flex: none; position: relative; width: 52px; height: 32px; border: 0; border-radius: 16px; background: #A9B0BC; cursor: pointer; padding: 0; }
 .switch[aria-checked="true"] { background: var(--cover); }
+.switch::after { content: ""; position: absolute; inset: -6px -4px; }   /* 44 px touch target around the 32 px track */
 .switch-knob { position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 50%; background: #fff; transition: left .15s; }
 .switch[aria-checked="true"] .switch-knob { left: 23px; }
 .hero-title-sm { margin-top: 18px; font-size: 26px; }

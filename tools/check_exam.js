@@ -143,6 +143,9 @@ PM.content.load('zh-Hans').then(function () {
   fresh(2);
   var tm = PM.exam.startMock(D0);
   tm.ids.forEach(function (id, i) { if (i < 16) tm.answers[i] = Q(id).answer; });
+  clockMs -= 3 * 3600 * 1000;            // phone clock set back: never more than the full 45 minutes
+  ok(PM.exam.mockLeft() === 45 * 60000, 'clock set back: left stays at 45 minutes (' + PM.exam.mockLeft() + ')');
+  clockMs += 3 * 3600 * 1000;
   clockMs += 44 * 60000;
   ok(PM.exam.mockLeft() === 60000, '1 minute left after 44 (' + PM.exam.mockLeft() + ')');
   clockMs += 5 * 60000;

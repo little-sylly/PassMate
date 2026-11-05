@@ -172,6 +172,7 @@ PM.content.load('zh-Hans').then(function () {
       }
       PM.session.advance();
     }
+    if (!PM.store.get().streak.days[d]) fail(day, 'the day is not credited to the streak after the last answer');
     PM.session.finish();
 
     // Some days she takes the optional 再练 5 道错题.

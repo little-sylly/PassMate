@@ -192,7 +192,7 @@
     return s.mock;
   }
 
-  function mockLeft() { var m = S().mock; return m ? Math.max(0, m.deadline - api.now()) : 0; }
+  function mockLeft() { var m = S().mock; return m ? Math.max(0, Math.min(M().minutes * 60000, m.deadline - api.now())) : 0; }
 
   // Hand in (or time's up). Every answer is recorded once; misses join the review list.
   function finishMock(d) {
@@ -202,7 +202,7 @@
     var now = api.now(), res = score(m.ids, m.answers);
     record(m.ids, m.answers, d);
     var entry = {d: d, right: res.right, total: res.total, values: res.values, valuesTotal: res.valuesTotal,
-      pass: res.pass, english: true, secs: Math.round((Math.min(now, m.deadline) - m.started) / 1000), timeUp: now >= m.deadline};
+      pass: res.pass, english: true, secs: Math.max(0, Math.round((Math.min(now, m.deadline) - m.started) / 1000)), timeUp: now >= m.deadline};
     var list = mocks();
     list.push(entry); trim(list);
     s.mock = null;

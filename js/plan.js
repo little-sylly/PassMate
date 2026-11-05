@@ -530,7 +530,7 @@
       {key: 'parts', ok: parts.every(function (p) { return p.ok; }), parts: parts},
       {key: 'gate', ok: !!(s.gate && s.gate.cleared)},
       {key: 'mocks', ok: mocks.length === r.mocksInARow && mocks.every(function (m) { return m.pass && m.english; })},
-      {key: 'stuck', ok: stuckIds().length === 0, n: stuckIds().length},
+      {key: 'stuck', ok: stuckIds().length === 0 && metCount() >= r.stuckMinWords, n: stuckIds().length},
       {key: 'mastered', ok: masteredCount(d) >= r.wordsMastered, n: masteredCount(d), need: r.wordsMastered}
     ];
     return {ready: list.every(function (c) { return c.ok; }), list: list};

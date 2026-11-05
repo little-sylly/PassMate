@@ -295,6 +295,45 @@ def mark_item(marker, item, own_term, fields):
     return on_screen
 
 
+def move_answer(options, answer, slot, spans=None, key=None):
+    """Move the right option to `slot` (0-based), keeping the others in order. Returns the new
+    answer letter. `spans` (the item's anchor dict) has its per-option list `o` moved the same way."""
+    cur = ord(answer) - ord("a")
+    if cur == slot:
+        return answer
+    order = [i for i in range(len(options)) if i != cur]
+    order.insert(slot, cur)
+    options[:] = [options[i] for i in order]
+    if spans and "o" in spans:
+        spans["o"] = [spans["o"][i] for i in order]
+    return chr(ord("a") + slot)
+
+
+def balance_drill_answers(drills):
+    """The drill source has the right answer in slot a far too often (26 of 42). Spread the right
+    slot evenly with a fixed seed, so a learner can't pick by position. The text is untouched; only
+    the order of options changes (and the anchor spans per option move with them)."""
+    import random
+    rng = random.Random(20261105)
+
+    def slots(n, k):
+        out = [i % k for i in range(n)]
+        rng.shuffle(out)
+        return out
+
+    main = slots(len(drills), 3)
+    dec = slots(len(drills), 2)
+    twins = [d for d in drills if "twin" in d]
+    tws = slots(len(twins), 3)
+    for d, m, c in zip(drills, main, dec):
+        d["answer"] = move_answer(d["options_en"], d["answer"], m, d.get("a"))
+        dc = d["decode"]
+        dc["answer"] = move_answer(dc["options_zh"], dc["answer"], c)
+    for d, t in zip(twins, tws):
+        tw = d["twin"]
+        tw["answer"] = move_answer(tw["options_en"], tw["answer"], t, tw.get("a"))
+
+
 def build_simplified(content_dir):
     terms_raw = load(content_dir, "anchor-terms")
     questions_raw = load(content_dir, "practice-questions", "questions")
@@ -355,6 +394,7 @@ def build_simplified(content_dir):
             count(tw)
             d["twin"] = tw
         drills.append(d)
+    balance_drill_answers(drills)
 
     scenarios = []
     for r in scenarios_raw:

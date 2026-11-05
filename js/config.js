@@ -2,7 +2,7 @@
 (function (PM) {
   'use strict';
   PM.config = {
-    version: '0.6.0',            // keep in step with CACHE in sw.js
+    version: '0.6.1',            // keep in step with CACHE in sw.js
     storeKey: 'passmate.v1',
     storeVersion: 2,
     dataFiles: {'zh-Hans': 'data/content.zh-Hans.json', 'zh-Hant': 'data/content.zh-Hant.json'},
@@ -20,7 +20,7 @@
     mastered: {rightOnDays: 3, noMissInLastDays: 7},
     values: {gateRun: 3, gateQuestions: 5, recheckDays: 7},   // 5/5 three runs in a row; weekly re-check
     mock: {questions: 20, minutes: 45, passMark: 15, valuesQuestions: 5, lowSeconds: 300},   // real test rules
-    readyToSit: {partRight: 0.8, partOverLast: 10, partMinAnswers: 5, mocksInARow: 2, wordsMastered: 150},
+    readyToSit: {partRight: 0.8, partOverLast: 10, partMinAnswers: 5, mocksInARow: 2, wordsMastered: 150, stuckMinWords: 20},
     sprintDays: 7,
     totalWords: 171,
 

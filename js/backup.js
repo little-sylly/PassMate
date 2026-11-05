@@ -107,7 +107,9 @@
 
   // -> {ok: true, rec, at} or {ok: false, error: 'empty' | 'bad' | 'newer'}
   function read(text) {
-    var flat = String(text || '').replace(/\s+/g, '');
+    var flat = String(text || '');
+    try { flat = flat.normalize('NFKC'); } catch (e) { /* old WebView */ }
+    flat = flat.replace(/[\u200B-\u200D\u2060\uFEFF\u00AD]/g, '').replace(/[\u2010-\u2015\u2212\uFE63]/g, '-').replace(/\s+/g, '');
     if (!flat) return {ok: false, error: 'empty'};
     var m = /PM(\d+)\.([A-Za-z0-9_-]+)/.exec(flat);
     if (!m) return {ok: false, error: 'bad'};

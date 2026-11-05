@@ -181,6 +181,10 @@ async function main() {
   var rw = B.PM.backup.read(wrapped);
   check(rw.ok && !diff(plain(rw.rec), plain(PM.store.get())), 'line breaks and text around the code are ignored');
   check(B.PM.backup.read('').error === 'empty' && B.PM.backup.read('   \n').error === 'empty', 'empty paste');
+  // Pasted through a chat app or a keyboard that swaps characters: zero-width, full-width, fancy hyphens.
+  var messy = code.replace(/(.{50})/g, '$1\u200B').replace(/-/g, '\uFF0D').replace(/PM1\./, '\uFF30\uFF2D1.');
+  check(B.PM.backup.read(messy).ok === true, 'zero-width spaces, full-width letters and dashes are accepted');
+  check(B.PM.backup.read('\uFEFF' + code.replace(/-/g, '\u2013')).ok === true, 'BOM and en dashes are accepted');
   check(B.PM.backup.read(code.slice(0, code.length - 40)).error === 'bad', 'a code cut short is refused');
   check(B.PM.backup.read(code.slice(0, 30)).error === 'bad', 'a code cut very short is refused');
   var mid = 4 + Math.floor((code.length - 4) / 2), ch = code.charAt(mid);

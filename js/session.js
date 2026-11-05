@@ -28,6 +28,14 @@
     return r.cur;
   }
 
+  // The day counts as soon as the last item is answered, so leaving before the results screen
+  // does not lose the streak. 看今天的结果 (finish) then only marks the run done.
+  function creditLast(r) {
+    if (r.extra || r.streakCredited || r.i !== r.items.length - 1) return;
+    r.streakAdded = PM.plan.finishDay(r.date);
+    r.streakCredited = true;
+  }
+
   PM.session = {
     stage: stage,
     current: function () {
@@ -63,6 +71,7 @@
       var r = run();
       PM.plan.recordWord(id, knew, r.date);
       r.results.push({i: r.i, kind: 'word', id: id, knew: knew});
+      creditLast(r);
       PM.store.save();
     },
     // picked/answer are letters 'a'..'c'. kind: 'q' | 'drill' | 'scenario' | 'twin' (twin: not recorded).
@@ -71,6 +80,7 @@
       if (kind !== 'twin') {
         PM.plan.recordChoice(kind, item, ok, c.taps + c.hint, r.date, !!r.extra);
         r.results.push({i: r.i, kind: kind, id: item.id, ok: ok, hint: !!c.hint});
+        creditLast(r);
       }
       PM.store.save();
       return ok;
@@ -86,7 +96,7 @@
     finish: function () {
       var r = run();
       r.done = true;
-      if (!r.extra) r.streakAdded = PM.plan.finishDay(r.date);
+      if (!r.extra && !r.streakCredited) { r.streakAdded = PM.plan.finishDay(r.date); r.streakCredited = true; }
       PM.store.save();
       return r;
     }

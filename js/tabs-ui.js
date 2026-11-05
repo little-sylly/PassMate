@@ -227,7 +227,7 @@
         var m = Math.min(PM.exam.passesInARow(), cfg.mocksInARow);
         value = T('progress.vMocks', {n: m, m: cfg.mocksInARow}); frac = m / cfg.mocksInARow;
       } else if (c.key === 'stuck') {
-        value = c.ok ? T('progress.vStuckOk') : T('progress.vStuck', {n: c.n}); frac = c.ok ? 1 : 0;
+        value = c.ok ? T('progress.vStuckOk') : c.n ? T('progress.vStuck', {n: c.n}) : '—'; frac = c.ok ? 1 : 0;
       } else {
         value = c.n + ' / ' + c.need; frac = Math.min(1, c.n / c.need);
       }
