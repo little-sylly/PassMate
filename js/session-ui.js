@@ -549,5 +549,6 @@
     return page;
   }
 
-  PM.sessionUI = {view: view};
+  // Shared with the gate and mock screens (exam-ui.js).
+  PM.sessionUI = {view: view, openSheet: openSheet, closeSheet: closeSheet, flagLink: flagLink, squares: squares};
 })(window.PM = window.PM || {});

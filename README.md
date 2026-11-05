@@ -8,10 +8,13 @@ Not affiliated with the Australian Government. See [CONTENT.md](CONTENT.md).
 
 ## Status
 
-M0 (data pipeline), M1 (app shell), M2 (session screens) and M3 (plan engine) done.
-The daily session is drawn by `js/plan.js`: stuck words and repeat mistakes first,
-Leitner reviews, then new words; stages unlock by mastery; the streak forgives one
-missed day a week; a test date adds a sprint week. Values gate and mock test are next (M4).
+M0 (data pipeline), M1 (app shell), M2 (session screens), M3 (plan engine) and M4
+(values gate and mock test) done. The daily session is drawn by `js/plan.js`: stuck words
+and repeat mistakes first, Leitner reviews, then new words; stages unlock by mastery; the
+streak forgives one missed day a week; a test date adds a sprint week. From stage 2 (or in
+sprint week) Today opens the values gate (`#/gate`: 5 values questions from 5 booklet
+headings, 5/5 three runs in a row, weekly re-check) and the mock test (`#/mock`: 20
+questions, 45 minutes, pass = 15/20 and all 5 values right). Their logic is `js/exam.js`.
 
 ## Run it
 
@@ -33,6 +36,13 @@ node tools/simulate_plan.js --days 90 --quiet
 
 It runs the real scripts in Node with a debug clock and fails on any session that
 breaks a plan rule (shape, duplicates, stuck cap, repeat timing, streak forgiveness).
+Gate and mock scoring against the real test rules (every possible mock result, time up,
+three runs in a row, weekly re-check):
+
+```
+node tools/check_exam.js
+```
+
 In the browser, `#/today?clock=3` moves "today" three days on (a red pill shows it);
 `?clock=0` puts it back.
 When a shell file changes, bump the version in `sw.js` and `js/config.js`.

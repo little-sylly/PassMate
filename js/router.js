@@ -1,4 +1,4 @@
-/* Hash router. Routes: #/welcome #/date #/today #/session #/review #/progress */
+/* Hash router. Routes: #/welcome #/date #/today #/session #/gate #/mock #/review #/progress */
 (function (PM) {
   'use strict';
   var routes = {};

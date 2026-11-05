@@ -7,6 +7,8 @@
   PM.router.define('date', PM.views.date);
   PM.router.define('today', PM.views.today);
   PM.router.define('session', PM.views.session);
+  PM.router.define('gate', PM.examUI.gate);
+  PM.router.define('mock', PM.examUI.mock);
   PM.router.define('review', function () { return PM.views.soon('review'); });
   PM.router.define('progress', function () { return PM.views.soon('progress'); });
   PM.router.start(document.getElementById('app'));

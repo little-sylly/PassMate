@@ -21,7 +21,10 @@
       log: [],               // recent answers {d, k, id, ok, h, p}, newest last (stage checks)
       wording: {},           // wording term id -> wording-trap misses since its last drill
       offer: null,           // {stage, declined: 'YYYY-MM-DD'} when a step up was put off
-      run: null              // today's session: the draw plus where she is in it
+      run: null,             // today's session: the draw plus where she is in it
+      gate: {inARow: 0, cleared: false, clearedAt: null, lastCheck: null, reopened: null, used: [], run: null, history: []},
+      mock: null,            // the mock test in progress (see PM.exam)
+      mocks: []              // finished mocks {d, right, total, values, valuesTotal, pass, english, secs, timeUp}
     };
   }
 

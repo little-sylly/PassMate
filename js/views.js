@@ -282,7 +282,7 @@
           sprintNote(s, d)
         ].concat(action, [
           h('div', {class: 'navlist'}, [
-            gateRow('gate', stage), gateRow('mock', stage),
+            gateRow('gate'), gateRow('mock'),
             dateRow(s)
           ])
         ]))
@@ -291,10 +291,10 @@
     ]);
   }
 
-  // Values gate and mock test rows: open from stage 2 once their screens exist (M4).
-  function gateRow(name, stage) {
-    var built = PM.router.has(name), open = stage >= 2 && built;
-    var sub = stage < 2 ? T('today.locksAt') : built ? T('today.' + name + 'Sub') : T('today.soon');
+  // Values gate and mock test rows: open from stage 2, or in sprint week whatever the stage.
+  function gateRow(name) {
+    var d = PM.dates.iso(), built = PM.router.has(name), open = built && PM.exam.isOpen(d);
+    var sub = !built ? T('today.soon') : !open ? T('today.locksAt') : PM.examUI.todaySub(name, d);
     return navRow(T('today.' + name), sub, '#/' + name, !open);
   }
 
@@ -320,5 +320,5 @@
   }
 
   PM.views = {welcome: welcome, date: testDate, today: today, session: function () { return PM.sessionUI.view(); }, soon: soon,
-    loadError: loadError, weekMarks: weekMarks};
+    loadError: loadError, weekMarks: weekMarks, topRow: topRow};
 })(window.PM = window.PM || {});
