@@ -191,7 +191,10 @@
     "extraNote": "加练不影响连续天数。答错的题之后还会再出现。",
     "home": "回到今天",
     "remindOffer": "每天提醒我学习",
-    "remindOfferSub": "加到手机日历，每天同一时间提醒"
+    "remindOfferSub": "加到手机日历，每天同一时间提醒",
+    "guess": "我是猜的",
+    "guessSub": "明天再练这道，这个词今天不算答对",
+    "guessed": "好，明天再练这道。这个词今天不算答对。"
   },
   "fast": {
     "title": "快速通关",
@@ -342,7 +345,17 @@
     "shared": "已发送，谢谢！",
     "copied": "已复制。打开微信，粘贴发给 Sam。",
     "copyFailed": "没能自动复制。请长按下面的文字，全选后复制，发给 Sam。",
-    "copyBox": "要发给 Sam 的文字"
+    "copyBox": "要发给 Sam 的文字",
+    "guessedTag": "猜对的",
+    "allH": "做过的题 · {n}",
+    "allNote": "最新的在上面",
+    "allLead": "答对的也在这里。猜对的题，在答题后点“我是猜的”，它就会回到复习里。",
+    "allShow": "展开 {n} 道题",
+    "allHide": "收起",
+    "allMore": "再看 {n} 道",
+    "allRight": "{date} 答对",
+    "allWrong": "{date} 答错",
+    "allTimes": "做过 {n} 次，对了 {right} 次"
   },
   "progress": {
     "kicker": "进度",

@@ -22,6 +22,7 @@
   }
 
   var extra = null;
+  var snap = null;     // the words of the last answer as they were before it (我是猜的); memory only
   var active = null;   // the run on screen: answers go to it even if midnight passes mid-session
 
   function run() { return active || PM.session.current(); }
@@ -85,12 +86,22 @@
     answerChoice: function (kind, item, picked) {
       var r = run(), ok = picked === item.answer, c = cur(r);
       if (kind !== 'twin') {
+        snap = PM.plan.snapshot(kind, item);    // for 我是猜的 on the result screen
         PM.plan.recordChoice(kind, item, ok, c.taps + c.hint, r.date, !!r.extra);
         r.results.push({i: r.i, kind: kind, id: item.id, ok: ok, hint: !!c.hint});
         creditLast(r);
       }
       PM.store.save();
       return ok;
+    },
+    // 我是猜的 after a right answer: back tomorrow, and the word gets no credit for it.
+    guess: function (kind, item) {
+      var r = run();
+      if (!PM.plan.recordGuess(kind, item, snap, r.date)) return false;
+      r.results.forEach(function (x) { if (x.id === item.id && x.i === r.i) x.guessed = true; });
+      snap = null;
+      PM.store.save();
+      return true;
     },
     // A flag keeps the Chinese she was reading (PM.share.snapshot), so Sam gets the text itself.
     flag: function (id, note, where) {

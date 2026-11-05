@@ -3,6 +3,7 @@
 
      node tools/simulate_plan.js [--days 30] [--seed 7] [--learner typical|weak|strong] [--quiet]
        [--fast]               she takes 快速通关 (the optional daily round) whenever it is offered
+       [--guess]              she marks some right answers 我是猜的 (back tomorrow, no credit for the word)
        [--no-date]            she never sets a test date (pace runs: --days 180 --no-date)
        [--trace A141]         one line a day for that word (drawn items, box, squares)
        [--set path=value]     try other numbers, e.g. --set session.questions=8 (repeatable)
@@ -26,6 +27,8 @@ var LEARNER = arg('learner', 'typical');
 var BASE = {typical: 0.9, weak: 0.8, strong: 1.1}[LEARNER], SPREAD = {typical: 0.3, weak: 0.35, strong: 0.15}[LEARNER];
 if (BASE == null) { console.error('learner must be typical, weak or strong'); process.exit(2); }
 var FAST = args.indexOf('--fast') !== -1;             // she takes 快速通关 whenever it is offered
+var GUESS = args.indexOf('--guess') !== -1;           // she marks some right answers 我是猜的
+var guesses = 0;
 var START = new Date(2026, 10, 9);          // a Monday
 var MISSED = {6: 1, 13: 1, 14: 1, 22: 1};   // day 6 is forgiven; 13+14 end the streak; 22 forgiven again
 var DATE_SET_ON = 22, TEST_IN = 9;          // on day 22 she adds a test date 9 days out -> sprint from day 24
@@ -132,7 +135,9 @@ function checkOverdue(day, d) {
   PM.plan.repeats().forEach(function (id) {
     var late = PM.dates.daysBetween(items[id].repeat.due, d);
     maxLate = Math.max(maxLate, late);
-    if (late > 5 && LEARNER === 'typical') fail(day, 'repeat ' + id + ' is ' + late + ' days overdue');
+    // With --guess she adds repeats of her own (我是猜的) on top of the repair budget, and only one
+    // drill fits a session, so a waiting drill can slip one more day (seen: 6, with 2 missed days).
+    if (late > (GUESS ? 6 : 5) && LEARNER === 'typical') fail(day, 'repeat ' + id + ' is ' + late + ' days overdue');
   });
 }
 
@@ -246,6 +251,36 @@ function ruleChecks() {
   var before = JSON.stringify([rec('A002').box, rec('A002').due]);
   P.recordWord('A002', true, day(5));
   expect(JSON.stringify([rec('A002').box, rec('A002').due]) === before, '认识 moved A002\'s box: ' + before + ' -> ' + JSON.stringify([rec('A002').box, rec('A002').due]));
+
+  // 我是猜的: a right answer marked as a guess comes back tomorrow and gives the word nothing.
+  function guessed(kind, item, k) {
+    var snap = P.snapshot(kind, item);
+    P.recordChoice(kind, item, true, 0, day(k));
+    return P.recordGuess(kind, item, snap, day(k));
+  }
+  PM.store.reset(); PM.store.set({welcomed: true});
+  P.recordWord('A017', true, day(0));
+  P.recordChoice('q', canberra, true, 0, day(1));                       // a real right day first
+  var logN = PM.store.get().log.length;
+  expect(guessed('q', canberra, 2), '我是猜的 refused after a right answer');
+  expect(rec('PQ018').repeat && rec('PQ018').repeat.due === day(3) && rec('PQ018').guessed === day(2), '我是猜的: PQ018 should be back tomorrow');
+  expect(JSON.stringify(rec('A017').rightDays) === JSON.stringify([day(1)]) && rec('A017').box === 1 && rec('A017').due === day(3),
+    '我是猜的: A017 got credit ' + JSON.stringify([rec('A017').rightDays, rec('A017').box, rec('A017').due]));
+  expect(PM.store.get().log.length === logN + 1 && PM.store.get().log[logN].ok === true, '我是猜的: the log keeps the answer as right');
+  expect(!(rec('A017').troubleDays || []).length && !rec('A017').stuck, '我是猜的 is not a trouble day');
+  expect(!P.recordGuess('q', canberra, P.snapshot('q', PM.content.question('PQ082')), day(2)), '我是猜的 accepted with another item\'s snapshot');
+  // a word first met by the guessed answer: met today, no right day
+  var q82 = PM.content.question('PQ082');
+  guessed('q', q82, 5);
+  [q82.term_id].concat(q82.wording_focus || []).forEach(function (w) {
+    expect(rec(w).met === day(5) && !(rec(w).rightDays || []).length && rec(w).box === 1, '我是猜的: ' + w + ' (first met) ' + JSON.stringify([rec(w).met, rec(w).rightDays]));
+  });
+  // a stuck word gets no square from a guess, and stays stuck
+  makeStuck('A017');
+  P.recordChoice('q', canberra, true, 0, day(4));
+  guessed('q', canberra, 5);
+  expect(rec('A017').stuck && JSON.stringify(rec('A017').stuckRight) === JSON.stringify([day(4)]), '我是猜的 moved a stuck word\'s squares: ' + JSON.stringify(rec('A017').stuckRight));
+  expect(P.answered()[0] === 'PQ018' && P.answered().every(function (id) { return !/^A/.test(id); }), '做过的题: newest first, questions only');
 
   // Every word met: all cards are reviews, each with a question; with nothing due, the same.
   [true, false].forEach(function (anyDue) {
@@ -387,9 +422,20 @@ PM.content.load('zh-Hans').then(function () {
           if (!tapped[sp[2]] && rand() < (1 - skill(sp[2])) * tapScale) { tapped[sp[2]] = 1; PM.session.tap(sp[2]); }
         });
         if (stage === 2 && kind === 'q' && rand() < 0.15) PM.session.hint();
-        var ok = rand() < pRight(item, kind === 'drill' ? 'drill' : kind);
+        // rand() before pRight(), as before 0.7.1: pRight can draw too (a new word's difficulty),
+        // and keeping the order keeps the pace runs comparable across versions.
+        var roll = rand(), p = pRight(item, kind === 'drill' ? 'drill' : kind), ok = roll < p;
         var picked = ok ? item.answer : (item.answer === 'a' ? 'b' : 'a');
+        var tid = item.term_id, had = ((PM.store.get().items[tid] || {}).rightDays || []).slice();
         PM.session.answerChoice(kind, item, picked);
+        // --guess: a right answer she was unsure of, she marks 我是猜的 (more likely when it was hard).
+        if (GUESS && ok && rand() < (1 - p) * 0.6) {
+          if (!PM.session.guess(kind, item)) fail(day, '我是猜的 refused on ' + item.id);
+          var ir = PM.store.get().items[item.id], tr = PM.store.get().items[tid] || {};
+          if (!ir.repeat || ir.repeat.due !== PM.dates.add(d, 1) || ir.guessed !== d) fail(day, '我是猜的: ' + item.id + ' not back tomorrow');
+          if (JSON.stringify(tr.rightDays || []) !== JSON.stringify(had) || tr.box !== 1) fail(day, '我是猜的: ' + tid + ' still got credit');
+          guesses++;
+        }
         if (kind === 'drill') drilled[item.term_id] = 1;
         if (kind !== 'scenario') { asked++; if (ok) right++; }
       }
@@ -484,6 +530,7 @@ PM.content.load('zh-Hans').then(function () {
   console.log('store record ' + Math.round(raw.length / 1024) + ' KB');
   console.log('快速通关 open on ' + fastOpenDays + ' days' + (FAST ? ', taken ' + fastRounds + ' times, ' + fastQs + ' questions, ' +
     (fastQs ? Math.round(fastRightAll / fastQs * 100) : 0) + '% right' : ' (not taken: run with --fast)'));
+  if (GUESS) console.log('我是猜的 marked ' + guesses + ' times');
   var sp = openSpells(DAYS);
   console.log('stuck spells ' + sp.length + ', longest: ' + sp.slice(0, 6).map(function (x) { return x.id + ' ' + x.days + 'd' + (x.open ? '+' : ''); }).join(', ') +
     '; stuck-word days with nothing drawn that could unstick it: ' + stuckNoQ + ' / ' + stuckDays);

@@ -173,6 +173,41 @@
     fastCheck(d);
   }
 
+  // ---- 我是猜的: a right answer she says she guessed ------------------------------------------
+  // The answer is recorded first (检查答案), so the session takes a snapshot of the words it can
+  // move just before, and a guess puts those back. Her own report can only make the plan
+  // stricter: the question comes back like a miss, the word gets no right day and goes back to
+  // box 1 (no trouble day: she was honest, not wrong). The log keeps the answer as right.
+  var WORD_FIELDS = ['met', 'box', 'due', 'rightDays', 'stuck', 'stuckAt', 'stuckRight', 'unstuck', 'troubleDays', 'lastTrouble'];
+  function wordsOf(kind, item) {
+    var ids = [item.term_id];
+    if (kind === 'q') (item.wording_focus || []).forEach(function (w) { if (ids.indexOf(w) === -1) ids.push(w); });
+    return ids.filter(function (id) { return id && PM.content.term(id); });
+  }
+  function snapshot(kind, item) {
+    var out = {};
+    wordsOf(kind, item).forEach(function (id) {
+      var r = peek(id) || {}, f = {};
+      WORD_FIELDS.forEach(function (k) { f[k] = r[k] === undefined ? undefined : JSON.parse(JSON.stringify(r[k])); });
+      out[id] = f;
+    });
+    return {id: item.id, words: out};
+  }
+  function recordGuess(kind, item, snap, d) {
+    if (!snap || snap.id !== item.id) return false;
+    var r = rec(item.id), boxDays = C().boxDays;
+    r.repeat = {step: 0, due: D.add(d, C().repeatDays[0])};
+    r.guessed = d;
+    Object.keys(snap.words).forEach(function (id) {
+      var w = rec(id), was = snap.words[id], tappedSince = w.lastTrouble === d && was.lastTrouble !== d;
+      WORD_FIELDS.forEach(function (k) { if (was[k] === undefined) delete w[k]; else w[k] = JSON.parse(JSON.stringify(was[k])); });
+      meet(id, d);
+      w.box = 1; w.due = D.add(d, boxDays[1]);
+      if (tappedSince) trouble(id, d, false);   // a tap on the result screen still counts
+    });
+    return true;
+  }
+
   // ---- state queries -------------------------------------------------------------------------
   function isMastered(id, d) {
     var r = peek(id), m = PM.config.mastered;
@@ -199,6 +234,17 @@
     var items = S().items, out = [];
     for (var id in items) if (items[id].repeat && itemOf(id)) out.push(id);
     return out.sort(function (a, b) { return items[a].repeat.due < items[b].repeat.due ? -1 : items[a].repeat.due > items[b].repeat.due ? 1 : (a < b ? -1 : 1); });
+  }
+
+  // Every question, drill and scenario she has answered (sessions, 再练, 快速通关, gate, mock),
+  // newest first: Review's 做过的题.
+  function answered() {
+    var items = S().items, out = [];
+    for (var id in items) if (items[id].n && kindOf(id) !== 'word' && itemOf(id)) out.push(id);
+    return out.sort(function (a, b) {
+      var la = items[a].last || '', lb = items[b].last || '';
+      return la > lb ? -1 : la < lb ? 1 : (a < b ? -1 : 1);
+    });
   }
 
   function sprint(d) {
@@ -695,7 +741,8 @@
   PM.plan = {
     index: index, draw: draw, todayRun: todayRun, extraRun: extraRun,
     fastCheck: fastCheck, fastAvailable: fastAvailable, fastDraw: fastDraw, fastRun: fastRun, fastToday: fastToday,
-    recordWord: recordWord, recordTap: recordTap, recordChoice: recordChoice,
+    recordWord: recordWord, recordTap: recordTap, recordChoice: recordChoice, snapshot: snapshot, recordGuess: recordGuess,
+    answered: answered,
     isMastered: isMastered, masteredCount: masteredCount, metCount: metCount,
     stuckIds: stuckIds, repeats: repeats, sprint: sprint,
     streak: streak, finishDay: finishDay,

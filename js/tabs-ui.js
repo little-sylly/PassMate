@@ -55,7 +55,8 @@
     var text = k === 'scenario' ? it.scenario_en : it.question_en, misses = (r.n || 0) - (r.right || 0);
     var sub = [dueLabel(r.repeat.due)];
     if (k !== 'q') sub.push(kindLabel(id));
-    if (misses > 1) sub.push(T('review.missTimes', {n: misses}));
+    if (r.guessed && r.lastRight) sub.push(T('review.guessedTag'));
+    else if (misses > 1) sub.push(T('review.missTimes', {n: misses}));
     return h('li', null, h('button', {
       class: 'rv-row rv-q', type: 'button', onclick: function (e) { answerSheet(id, e.currentTarget); }
     }, [
@@ -74,10 +75,61 @@
       h('div', {class: 'miss-pick miss-right'}, [h('span', {class: 'miss-label'}, T('review.rightAnswer')),
         h('span', {lang: 'en'}, it.options_en[right])]),
       explain.filter(Boolean).map(function (x) { return h('p', {class: 'explain-text'}, mixed(x)); }),
-      h('p', {class: 'fine fine-tight'}, T('review.backOn', {when: dueLabel(PM.store.get().items[id].repeat.due)})),
+      h('p', {class: 'fine fine-tight'}, lastLine(id)),
       h('button', {class: 'btn btn-quiet sheet-focus', type: 'button', onclick: U().closeSheet}, T('session.sheetClose')),
       U().flagLink(id, 'review')
     ]), opener);
+  }
+
+  // Under the answer: when it comes back, or (not waiting) how it went last time.
+  function lastLine(id) {
+    var r = PM.store.get().items[id] || {};
+    if (r.repeat) return T('review.backOn', {when: dueLabel(r.repeat.due)});
+    return T(r.lastRight ? 'review.allRight' : 'review.allWrong', {date: md(r.last)});
+  }
+
+  // 做过的题: everything she has answered, newest first, so she can look again at one she got
+  // right (maybe by luck). Closed at first so the mistakes stay on top; rows built on opening.
+  function allRow(id) {
+    var it = PM.plan.itemOf(id), r = PM.store.get().items[id], k = PM.plan.kindOf(id);
+    var sub = [h('span', {class: r.lastRight ? 'rv-ok' : 'rv-bad'}, T(r.lastRight ? 'review.allRight' : 'review.allWrong', {date: md(r.last)}))];
+    if (k !== 'q') sub.push(' · ' + kindLabel(id));
+    if (r.guessed && r.lastRight && r.repeat) sub.push(' · ' + T('review.guessedTag'));
+    if (r.n > 1) sub.push(' · ' + T('review.allTimes', {n: r.n, right: r.right || 0}));
+    return h('li', null, h('button', {
+      class: 'rv-row rv-q rv-all-row', type: 'button', onclick: function (e) { answerSheet(id, e.currentTarget); }
+    }, [
+      h('span', {class: 'rv-text'}, [h('span', {class: 'rv-qtext', lang: 'en'}, k === 'scenario' ? it.scenario_en : it.question_en), h('span', {class: 'rv-sub'}, sub)]),
+      icon(20, CHEV)
+    ]));
+  }
+  function allBlock() {
+    var ids = PM.plan.answered();
+    if (!ids.length) return null;
+    var STEP = 20, shown = 0, open = false;
+    var list = h('ul', {class: 'rv-list rv-all', hidden: true});
+    var more = h('button', {class: 'link-btn rv-more rv-all-more', type: 'button', hidden: true, onclick: grow});
+    function grow() {
+      ids.slice(shown, shown + STEP).forEach(function (id) { list.appendChild(allRow(id)); });
+      shown = Math.min(ids.length, shown + STEP);
+      more.hidden = shown >= ids.length;
+      more.textContent = T('review.allMore', {n: Math.min(STEP, ids.length - shown)});
+    }
+    var toggle = h('button', {
+      class: 'btn btn-quiet rv-all-toggle', type: 'button', 'aria-expanded': 'false',
+      onclick: function () {
+        open = !open;
+        if (open && !shown) grow();
+        list.hidden = !open; more.hidden = !open || shown >= ids.length;
+        toggle.setAttribute('aria-expanded', String(open));
+        toggle.textContent = open ? T('review.allHide') : T('review.allShow', {n: ids.length});
+      }
+    }, T('review.allShow', {n: ids.length}));
+    return h('section', {class: 'rv-all-block', 'aria-labelledby': 'all-h'}, [
+      h('div', {class: 'sec-head'}, [h('h2', {class: 'sec-title', id: 'all-h'}, T('review.allH', {n: ids.length})), h('span', {class: 'sec-note'}, T('review.allNote'))]),
+      h('p', {class: 'muted rv-all-lead'}, T('review.allLead')),
+      toggle, list, more
+    ]);
   }
 
   // Repeat mistakes grouped by the wording that tripped her (NOT, EXCEPT...).
@@ -205,7 +257,7 @@
         h('div', {class: 'plain-row'}, [h('h1', null, T('review.title')), V().scriptToggle('light')]),
         h('p', {class: 'plain-lead'}, T('review.lead', {n: PM.config.plan.stuckClearDays}))
       ]),
-      h('main', {class: 'body body-review'}, [empty, stuck, traps, repeatsBlock(reps), flagsBlock()]),
+      h('main', {class: 'body body-review'}, [empty, stuck, traps, repeatsBlock(reps), allBlock(), flagsBlock()]),
       foot,
       V().tabBar('review')
     ]);

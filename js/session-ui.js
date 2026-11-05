@@ -240,7 +240,7 @@
     var kind = spec.kind || it.kind, isS = kind === 'scenario';
     var item = spec.item || (isS ? PM.content.scenario(it.id) : PM.content.question(it.id));
     var a = item.a || {};
-    var picked = null, checked = false, hinted = false, seen = {};
+    var picked = null, checked = false, hinted = false, guessed = false, seen = {};
     var root = h('div', {class: 'choice'});
 
     function tap(id, el) { wordSheet(id, el); }
@@ -295,6 +295,16 @@
       ]);
     }
 
+    // 我是猜的: right, but a guess. One tap; then it says what happens (no undo: it only makes
+    // the plan stricter, and the question is back tomorrow anyway).
+    function guessLink() {
+      if (guessed) return h('div', {class: 'review-note guess-note', role: 'status'}, [icon(18, ['M4 12a8 8 0 108-8 8 8 0 00-5.7 2.4L4 8', 'M4 4v4h4']), T('session.guessed')]);
+      return h('button', {
+        class: 'guess-link', type: 'button',
+        onclick: function () { if (PM.session.guess(kind, item)) { guessed = true; paint(); } }
+      }, [h('span', {class: 'guess-main'}, T('session.guess')), h('span', {class: 'guess-sub'}, T('session.guessSub'))]);
+    }
+
     // Verdict, explanation and the review note read as one block under the options (A3).
     // The flag link sits at its end, not in the pinned footer, so the footer stays one button tall.
     function feedback() {
@@ -305,6 +315,7 @@
         h('h2', {class: 'explain-title'}, isS ? T('session.takeaway') : T('session.whyPick', {letter: item.answer})),
         h('p', {class: 'explain-text'}, mixed(isS ? item.takeaway_zh : item.explain_zh)),
         ok || kind === 'twin' ? null : h('div', {class: 'review-note'}, [icon(18, ['M4 12a8 8 0 108-8 8 8 0 00-5.7 2.4L4 8', 'M4 4v4h4']), T('session.missedNote')]),
+        ok && kind !== 'twin' ? guessLink() : null,
         flagLink(spec.flagId || item.id, kind)
       ]);
     }

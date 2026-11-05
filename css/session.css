@@ -70,6 +70,11 @@
 .explain-text { margin: 0; }
 .review-note { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding: 12px; background: var(--tint); border-radius: 8px; font-size: 15px; }
 .review-note svg { flex: none; color: var(--cover); }
+/* 我是猜的: a quiet outlined row under the explanation, after a right answer */
+.guess-link { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; min-height: 48px; margin-top: 14px; padding: 10px 12px;
+  border: 1px solid var(--rule); border-radius: 8px; background: #fff; color: var(--ink); text-align: left; cursor: pointer; font: inherit; }
+.guess-main { font-size: 15px; font-weight: 600; color: var(--cover); }
+.guess-sub { font-size: 13px; line-height: 1.4; color: var(--muted); }
 
 /* word card + dictionary entry */
 .headword { margin: 0; font-size: 32px; font-weight: 700; line-height: 1.2; letter-spacing: -.01em; }
