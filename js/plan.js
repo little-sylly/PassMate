@@ -395,6 +395,8 @@
         return !used[q] && kindOf(q) !== 'scenario' && (it.term_id === id || (it.wording_focus || []).indexOf(id) !== -1);
       })[0];
       // A question not resting first; a stuck word with only resting ones still gets one (repair).
+      // Tried 15 Nov: a different question before its own missed one. It slowed unsticking (a
+      // typical word stuck 29 days, a weak learner short of 150 at day 180): reverted.
       return own || questionFor(id, {drill: false}) || questionFor(id, {drill: false, pending: true})
         || questionFor(id) || questionFor(id, {pending: true})
         || questionFor(id, {drill: false, repair: true}) || questionFor(id, {pending: true, repair: true});
@@ -503,6 +505,16 @@
       PM.content.list('questions').forEach(function (q) {
         if (!seen(q.id) && !pending(q.id) && !dupTaken(q.id) && (stage > 1 || q.difficulty < 3)) addQ(q.id, 'more');
       });
+    }
+    // Still short (a learner who has nearly everything resting): the questions seen longest ago,
+    // so a session is never cut short and the oldest memory is the one tested.
+    if (qs.length < sess.questions) {
+      PM.content.list('questions').filter(function (q) {
+        return seen(q.id) && !used[q.id] && !pending(q.id) && (stage > 1 || q.difficulty < 3);
+      }).sort(function (a, b) {
+        var la = items[a.id].last || '', lb = items[b.id].last || '';
+        return la < lb ? -1 : la > lb ? 1 : (a.id < b.id ? -1 : 1);
+      }).forEach(function (q) { addQ(q.id, 'more'); });
     }
 
     // 6. The values scenario: a missed one when due, else one not yet seen, else the oldest.
