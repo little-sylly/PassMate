@@ -16,7 +16,7 @@
     if (k === 'word') {
       en = it.term; add('zh', it.zh); add('explain', it.explain); add('trap', it.trap);
     } else if (k === 'q') {
-      en = it.question_en; add('gist_zh', it.gist_zh); add('explain_zh', it.explain_zh);
+      en = it.question_en; add('gist_zh', it.gist_zh); add('explain_zh', it.explain_zh); add('hook_zh', it.hook_zh);
     } else if (k === 'drill') {
       en = it.question_en;
       if (it.decode) {

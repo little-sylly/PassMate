@@ -233,6 +233,16 @@
     return T('session.finish');
   }
 
+  // 记忆小贴士: a memory hook on a fact question (a year in time, a number to scale), shown
+  // after she answers, right or wrong (Sam, 15 Nov). Review's answer sheet shows it too.
+  function hookBlock(text) {
+    if (!text) return null;
+    return h('div', {class: 'hook'}, [
+      h('span', {class: 'hook-label'}, [icon(16, ['M9 18h6', 'M10 21h4', 'M12 3a6 6 0 00-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0012 3z']), T('session.hookLabel')]),
+      h('p', {class: 'hook-text'}, mixed(text))
+    ]);
+  }
+
   // ---- question and scenario (one multiple-choice screen) -----------------------------
   // spec (drills): {item, kind: 'drill' | 'twin', kicker, nextText, onNext, flagId}
   function choiceScreen(run, it, next, stage, spec) {
@@ -242,6 +252,12 @@
     var a = item.a || {};
     var picked = null, checked = false, hinted = false, guessed = false, seen = {};
     var root = h('div', {class: 'choice'});
+    // Options in a fresh order each time the item comes back (a twin keeps its own order).
+    // picked and item.answer stay content letters; LETTERS[pos] is what she sees.
+    var times = ((PM.store.get().items || {})[item.id] || {}).n || 0;
+    var order = kind === 'twin' ? item.options_en.map(function (_, i) { return i; })
+      : PM.plan.optionOrder(item.id, item.options_en.length, times, LETTERS.indexOf(item.answer));
+    function shown(letter) { return LETTERS[order.indexOf(LETTERS.indexOf(letter))]; }
 
     function tap(id, el) { wordSheet(id, el); }
     function en(text, spans) { return anchored(text, spans, tap, seen); }
@@ -261,20 +277,20 @@
       return null;
     }
 
-    function optionRow(i) {
-      var letter = LETTERS[i], text = item.options_en[i];
+    function optionRow(pos) {
+      var i = order[pos], letter = LETTERS[i], text = item.options_en[i], label = LETTERS[pos];
       var state = '';
       if (checked) state = letter === item.answer ? 'right' : letter === picked ? 'wrong' : 'dim';
       else if (letter === picked) state = 'picked';
       var tag = checked && letter === item.answer ? T('session.correct') : checked && letter === picked ? T('session.yourPick') : null;
       var mark = state === 'right' ? h('span', {class: 'opt-mark'}, icon(16, ['M5 12.5l4.5 4.5L19 7.5']))
-        : state === 'wrong' ? h('span', {class: 'opt-mark'}, icon(16, ['M7 7l10 10M17 7L7 17'])) : h('span', {class: 'opt-letter'}, letter);
+        : state === 'wrong' ? h('span', {class: 'opt-mark'}, icon(16, ['M7 7l10 10M17 7L7 17'])) : h('span', {class: 'opt-letter'}, label);
       var pick = function () { if (!checked) { picked = letter; paint(); } };
-      var row = h('div', {class: 'opt opt-' + (state || 'idle'), onclick: pick}, [
+      var row = h('div', {class: 'opt opt-' + (state || 'idle'), 'data-key': letter, onclick: pick}, [
         h('button', {
           class: 'opt-btn', type: 'button', disabled: checked ? true : null,
           'aria-pressed': String(letter === picked),
-          'aria-label': T('session.optionAria', {letter: letter, text: text}), onclick: function (e) { e.stopPropagation(); pick(); }
+          'aria-label': T('session.optionAria', {letter: label, text: text}), onclick: function (e) { e.stopPropagation(); pick(); }
         }, mark),
         h('div', {class: 'opt-main'}, [
           tag ? h('span', {class: 'opt-tag opt-tag-top'}, tag) : null,
@@ -312,8 +328,9 @@
       return h('section', {class: 'explain'}, [
         h('div', {class: 'verdict ' + (ok ? 'verdict-ok' : 'verdict-bad'), role: 'status'},
           [icon(18, ok ? ['M5 12.5l4.5 4.5L19 7.5'] : ['M7 7l10 10M17 7L7 17']), ok ? T('session.gotIt') : T('session.missed')]),
-        h('h2', {class: 'explain-title'}, isS ? T('session.takeaway') : T('session.whyPick', {letter: item.answer})),
+        h('h2', {class: 'explain-title'}, isS ? T('session.takeaway') : T('session.whyPick', {letter: shown(item.answer)})),
         h('p', {class: 'explain-text'}, mixed(isS ? item.takeaway_zh : item.explain_zh)),
+        hookBlock(item.hook_zh),
         ok || kind === 'twin' ? null : h('div', {class: 'review-note'}, [icon(18, ['M4 12a8 8 0 108-8 8 8 0 00-5.7 2.4L4 8', 'M4 4v4h4']), T('session.missedNote')]),
         ok && kind !== 'twin' ? guessLink() : null,
         flagLink(spec.flagId || item.id, kind)
@@ -331,7 +348,7 @@
       root.appendChild(qEl);
       var g = gistBlock(); if (g) root.appendChild(g);
       var c = chip(); if (c) root.appendChild(c);
-      root.appendChild(h('div', {class: 'opts', role: 'group', 'aria-label': T('session.scenarioQ')}, item.options_en.map(function (_, i) { return optionRow(i); })));
+      root.appendChild(h('div', {class: 'opts', role: 'group', 'aria-label': T('session.scenarioQ')}, order.map(function (_, pos) { return optionRow(pos); })));
       if (checked) root.appendChild(feedback());
 
       var foot = footEl;
@@ -614,5 +631,5 @@
 
   // Shared with the gate and mock screens (exam-ui.js).
   PM.sessionUI = {view: view, openSheet: openSheet, closeSheet: closeSheet, flagLink: flagLink, squares: squares, fastCard: fastCard,
-    wordSheet: wordSheet, entry: entry};
+    wordSheet: wordSheet, entry: entry, hookBlock: hookBlock};
 })(window.PM = window.PM || {});

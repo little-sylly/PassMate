@@ -3,7 +3,7 @@
 
    Item records (store.items[id]) keep the M2 fields {n, right, taps, last, lastRight, know}
    and gain, where they apply:
-     terms      met (first day seen), box (Leitner 1-3), due, rightDays[], troubleDays[],
+     terms      met (first day seen), box (Leitner 1-5, see config.plan.boxDays), due, rightDays[], troubleDays[],
                 lastTrouble, stuck, stuckAt, stuckRight[], stuckShown, again (word card back on)
      questions, drills, scenarios
                 repeat {step, due}: a missed item coming back (+1 day, then +3)
@@ -267,12 +267,34 @@
     };
   }
 
+  // ---- option order (Sam, 15 Nov: a question that comes back should not look the same) --------
+  // Display only: answers, logs and flags keep the content's letters. Returns the content index
+  // shown at each position. times = how often she has answered it, so a refresh shows the same
+  // order and every new showing moves the right answer to another slot (3 options: all 6 orders
+  // over 6 showings). The start is seeded by the item, so the first showing varies across items.
+  function optionOrder(id, count, times, answer) {
+    var h = Math.floor(rng('opt' + id)() * 6 * count), k = times + h;
+    var ans = Math.max(0, answer), rest = [];
+    for (var i = 0; i < count; i++) if (i !== ans) rest.push(i);
+    if ((Math.floor(k / count) + (h % 2)) % 2) rest.reverse();
+    rest.splice(k % count, 0, ans);
+    return rest;
+  }
+
   // ---- picking a question for a word (the daily draw and 快速通关 share it) ----------------------
   // used: ids already in this draw. drillOk(): may a drill still be added?
-  function picker(items, used, stage, rand, drillOk) {
+  // d: the draw's day. A question answered right less than rightGapDays ago is resting: routine
+  // slots (reviews, fill, 快速通关) skip it, so a word with one or two questions waits for its
+  // next real check instead of showing the same question again (Sam, 15 Nov). Repair (o.repair:
+  // stuck words) may still use it; repeat mistakes come back by their own schedule.
+  function picker(items, used, stage, rand, drillOk, d) {
     var x = index(), cfg = C();
     function seen(id) { var r = items[id]; return !!(r && r.n); }
     function pending(id) { var r = items[id]; return !!(r && r.repeat); }
+    function resting(id) {
+      var r = items[id];
+      return !!(d && r && r.n && r.lastRight && r.last && D.daysBetween(r.last, d) < (cfg.rightGapDays || 0));
+    }
     function dupTaken(id) { var o = x.dup[id]; return !!(o && (seen(o) || used[o])); }
 
     function wantDifficulty() {
@@ -294,7 +316,8 @@
       c = c.concat(t.part === 5 ? (x.qByFocus[id] || []) : (x.qByTerm[id] || []));
       if (!c.length && o.anchor) c = x.qByAnchor[id] || [];
       c = c.filter(function (q) {
-        return !used[q] && (o.pending || !pending(q)) && !dupTaken(q) && !(o.maxDiff && (itemOf(q).difficulty || 1) > o.maxDiff);
+        return !used[q] && (o.pending || !pending(q)) && !dupTaken(q) && !(o.maxDiff && (itemOf(q).difficulty || 1) > o.maxDiff)
+          && (o.repair || !resting(q));
       });
       if (!c.length) return null;
       var fresh = c.filter(function (q) { return !seen(q); });
@@ -311,7 +334,7 @@
       c.sort(function (a, b) { return items[a].last < items[b].last ? -1 : items[a].last > items[b].last ? 1 : (a < b ? -1 : 1); });
       return c[0];
     }
-    return {seen: seen, pending: pending, dupTaken: dupTaken, questionFor: questionFor};
+    return {seen: seen, pending: pending, dupTaken: dupTaken, resting: resting, questionFor: questionFor};
   }
 
   // Met words not yet mastered, weakest first: fewest right days, then the most recent trouble.
@@ -333,7 +356,7 @@
     var stage = s.stage || 1, inSprint = sprint(d), rand = rng('pm' + d);
     var used = {}, words = [], qs = [], scenario = null, drills = 0;
     var items = s.items;
-    var pick = picker(items, used, stage, rand, function () { return drills < cfg.maxDrills; });
+    var pick = picker(items, used, stage, rand, function () { return drills < cfg.maxDrills; }, d);
     var seen = pick.seen, pending = pick.pending, dupTaken = pick.dupTaken, questionFor = pick.questionFor;
 
     // Repair work (stuck words, repeat mistakes, 还不熟 cards) has a budget, so new words and
@@ -371,8 +394,10 @@
         var it = itemOf(q);
         return !used[q] && kindOf(q) !== 'scenario' && (it.term_id === id || (it.wording_focus || []).indexOf(id) !== -1);
       })[0];
+      // A question not resting first; a stuck word with only resting ones still gets one (repair).
       return own || questionFor(id, {drill: false}) || questionFor(id, {drill: false, pending: true})
-        || questionFor(id) || questionFor(id, {pending: true});
+        || questionFor(id) || questionFor(id, {pending: true})
+        || questionFor(id, {drill: false, repair: true}) || questionFor(id, {pending: true, repair: true});
     }
     var stuck = [];
     stuckIds().sort(function (a, b) {
@@ -447,17 +472,19 @@
 
       // Leitner reviews due: boxes in turn, so new words' first check and older words' longer
       // checks both keep moving.
-      var due = {1: [], 2: [], 3: []};
+      // A word whose questions are all resting is skipped and stays due (checked again tomorrow).
+      var boxes = [], due = {};
+      for (var bx = 1; bx < cfg.boxDays.length; bx++) { boxes.push(bx); due[bx] = []; }
       Object.keys(items).forEach(function (id) {
         var r = items[id];
         if (x.term[id] && r.met && r.due && r.due <= d && due[r.box]) due[r.box].push(id);
       });
-      [1, 2, 3].forEach(function (b) {
+      boxes.forEach(function (b) {
         due[b].sort(function (p, q) { return items[p].due < items[q].due ? -1 : items[p].due > items[q].due ? 1 : (p < q ? -1 : 1); });
       });
       var turn = 0;
-      while (qs.length < sess.questions && (due[1].length || due[2].length || due[3].length)) {
-        var b = [1, 2, 3][turn++ % 3];
+      while (qs.length < sess.questions && boxes.some(function (b) { return due[b].length; })) {
+        var b = boxes[turn++ % boxes.length];
         if (!due[b].length) continue;
         review(due[b].shift());
       }
@@ -577,7 +604,7 @@
   function fastDraw(d) {
     var x = index(), s = S(), cfg = C(), r = cfg.fast, items = s.items, stage = s.stage || 1;
     var used = {}, blocked = {}, out = [];
-    var pick = picker(items, used, stage, rng('fast' + d), function () { return false; });
+    var pick = picker(items, used, stage, rng('fast' + d), function () { return false; }, d);
     function block(id) {
       if (!id || blocked[id]) return;
       blocked[id] = 1;
@@ -748,6 +775,6 @@
     streak: streak, finishDay: finishDay,
     eligible: eligible, offer: offer, acceptStage: acceptStage, declineStage: declineStage,
     stepBack: stepBack, stageProgress: stageProgress, masteryByPart: masteryByPart,
-    readiness: readiness, kindOf: kindOf, itemOf: itemOf
+    readiness: readiness, kindOf: kindOf, itemOf: itemOf, optionOrder: optionOrder
   };
 })(window.PM = window.PM || {});

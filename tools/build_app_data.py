@@ -43,8 +43,8 @@ TERM_ZH = ["zh", "explain", "trap"]
 
 QUESTION_KEEP = ["id", "term_id", "part", "heading", "difficulty", "wording_terms",
                  "wording_focus", "question_en", "options_en", "answer", "gist_zh",
-                 "explain_zh", "booklet_pages", "rednote_card"]
-QUESTION_ZH = ["gist_zh", "explain_zh"]
+                 "explain_zh", "hook_zh", "booklet_pages", "rednote_card"]
+QUESTION_ZH = ["gist_zh", "explain_zh", "hook_zh"]
 
 DRILL_KEEP = ["id", "term_id", "decode", "question_en", "options_en", "answer",
               "tip_zh", "explain_zh", "twin", "booklet_pages"]
@@ -260,7 +260,7 @@ def load(content_dir, name, key=None):
     return data if key is None else data[key]
 
 
-OPTIONAL = {"card", "rednote_card", "booklet_pages"}
+OPTIONAL = {"card", "rednote_card", "booklet_pages", "hook_zh"}
 
 
 def keep(row, fields):
@@ -454,7 +454,8 @@ def build_traditional(hans, cc):
             t[f] = cc.convert(t[f])
     for q in hant["questions"]:
         for f in QUESTION_ZH:
-            q[f] = cc.convert(q[f])
+            if f in q:               # hook_zh is optional
+                q[f] = cc.convert(q[f])
     for d in hant["drills"]:
         for f in DRILL_ZH:
             d[f] = cc.convert(d[f])
@@ -478,7 +479,8 @@ def zh_fields(data):
             yield f"{t['id']}.{f}", t.get(f)
     for q in data["questions"]:
         for f in QUESTION_ZH:
-            yield f"{q['id']}.{f}", q.get(f)
+            if f in q or f not in OPTIONAL:     # an absent optional field (hook_zh) is not empty
+                yield f"{q['id']}.{f}", q.get(f)
     for d in data["drills"]:
         for f in DRILL_ZH:
             yield f"{d['id']}.{f}", d.get(f)

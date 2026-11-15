@@ -367,6 +367,28 @@ function traceLine(day, d, items) {
     (r.stuck ? '  STUCK right ' + (r.stuckRight || []).length : '') + (PM.plan.isMastered(TRACE, d) ? '  mastered' : '');
 }
 
+// ---- repeat report (daily-run questions and drills): how soon a question comes back ----------
+// A question she answered right coming back within a week is the "same question again" Sam saw.
+var shown = {}, whyOf = {}, rightAgain = 0, rightAgainSoon = 0, dailyQs = 0, firstShows = 0;
+function noteRepeat(it, d) {
+  var r = PM.store.get().items[it.id];
+  dailyQs++;
+  shown[it.id] = (shown[it.id] || 0) + 1;
+  (whyOf[it.id] = whyOf[it.id] || []).push(it.why + (r && r.n ? (r.lastRight ? '+' : '-') : ''));
+  if (!r || !r.n) { firstShows++; return; }
+  if (r.lastRight && !r.repeat) {
+    rightAgain++;
+    if (PM.dates.daysBetween(r.last, d) < 7) { rightAgainSoon++; soonWhy[it.why] = (soonWhy[it.why] || 0) + 1; }
+  }
+}
+var soonWhy = {};
+function repeatReport() {
+  var ids = Object.keys(shown), most = ids.sort(function (a, b) { return shown[b] - shown[a]; }).slice(0, 8);
+  return 'daily-run questions ' + dailyQs + ': ' + firstShows + ' first time, ' + rightAgain + ' already answered right (' +
+    rightAgainSoon + ' within 7 days: ' + JSON.stringify(soonWhy) + '); most shown: ' + most.map(function (id) { return id + ' x' + shown[id]; }).join(', ') +
+    (args.indexOf('--repeats') !== -1 ? '\n' + most.map(function (id) { return '  ' + id + ' (' + PM.plan.itemOf(id).term_id + '): ' + whyOf[id].join(' '); }).join('\n') : '');
+}
+
 // ---- play ------------------------------------------------------------------------------------
 function tally(list, key) {
   var o = {};
@@ -414,6 +436,7 @@ PM.content.load('zh-Hans').then(function () {
       } else {
         var item = PM.plan.itemOf(it.id);
         var kind = it.kind;
+        if (kind !== 'scenario') noteRepeat(it, d);
         // taps on underlined words (help), more at stage 2, rarer at 3
         // She taps underlined words she is unsure of (stage 1 has the gist, so fewer taps).
         var anchors = [].concat((item.a && item.a.q) || [], [].concat.apply([], (item.a && item.a.o) || []));
@@ -530,6 +553,7 @@ PM.content.load('zh-Hans').then(function () {
   console.log('store record ' + Math.round(raw.length / 1024) + ' KB');
   console.log('快速通关 open on ' + fastOpenDays + ' days' + (FAST ? ', taken ' + fastRounds + ' times, ' + fastQs + ' questions, ' +
     (fastQs ? Math.round(fastRightAll / fastQs * 100) : 0) + '% right' : ' (not taken: run with --fast)'));
+  console.log(repeatReport());
   if (GUESS) console.log('我是猜的 marked ' + guesses + ' times');
   var sp = openSpells(DAYS);
   console.log('stuck spells ' + sp.length + ', longest: ' + sp.slice(0, 6).map(function (x) { return x.id + ' ' + x.days + 'd' + (x.open ? '+' : ''); }).join(', ') +

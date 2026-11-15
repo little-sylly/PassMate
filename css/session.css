@@ -68,6 +68,10 @@
 .verdict-bad { color: #B42318; }
 .explain-title { margin: 0 0 4px; font-size: 19px; line-height: 1.35; }
 .explain-text { margin: 0; }
+/* 记忆小贴士: a quiet aside under the explanation, not a second verdict */
+.hook { margin-top: 14px; padding: 12px 14px; border-left: 3px solid var(--cover); background: var(--tint); border-radius: 0 8px 8px 0; }
+.hook-label { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+.hook-text { margin: 0; }
 .review-note { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding: 12px; background: var(--tint); border-radius: 8px; font-size: 15px; }
 .review-note svg { flex: none; color: var(--cover); }
 /* 我是猜的: a quiet outlined row under the explanation, after a right answer */

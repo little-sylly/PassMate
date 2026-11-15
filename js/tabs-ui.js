@@ -75,6 +75,7 @@
       h('div', {class: 'miss-pick miss-right'}, [h('span', {class: 'miss-label'}, T('review.rightAnswer')),
         h('span', {lang: 'en'}, it.options_en[right])]),
       explain.filter(Boolean).map(function (x) { return h('p', {class: 'explain-text'}, mixed(x)); }),
+      U().hookBlock(it.hook_zh),
       h('p', {class: 'fine fine-tight'}, lastLine(id)),
       h('button', {class: 'btn btn-quiet sheet-focus', type: 'button', onclick: U().closeSheet}, T('session.sheetClose')),
       U().flagLink(id, 'review')

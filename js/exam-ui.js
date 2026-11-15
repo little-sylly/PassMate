@@ -183,13 +183,18 @@
 
       var q = PM.content.question(run.ids[run.i]), cur = run.answers[run.i];
       while (optsBox.firstChild) optsBox.removeChild(optsBox.firstChild);
-      q.options_en.forEach(function (text, k) {
-        var letter = LETTERS[k], on = cur === letter;
+      // Options in a fresh order each time she meets the question (answers stay content letters;
+      // the label is the position). Gate/mock answers are recorded on submit, so the order holds
+      // while she moves around the test.
+      var times = ((PM.store.get().items || {})[q.id] || {}).n || 0;
+      var order = PM.plan.optionOrder(q.id, q.options_en.length, times, LETTERS.indexOf(q.answer));
+      order.forEach(function (k, pos) {
+        var text = q.options_en[k], letter = LETTERS[k], label = LETTERS[pos], on = cur === letter;
         var choose = function () { pick(letter); };
-        optsBox.appendChild(h('div', {class: 'opt ' + (on ? 'opt-picked' : 'opt-idle'), onclick: choose}, [
+        optsBox.appendChild(h('div', {class: 'opt ' + (on ? 'opt-picked' : 'opt-idle'), 'data-key': letter, onclick: choose}, [
           h('button', {class: 'opt-btn', type: 'button', 'aria-pressed': String(on),
-            'aria-label': T('session.optionAria', {letter: letter, text: text}),
-            onclick: function (e) { e.stopPropagation(); choose(); }}, h('span', {class: 'opt-letter'}, letter)),
+            'aria-label': T('session.optionAria', {letter: label, text: text}),
+            onclick: function (e) { e.stopPropagation(); choose(); }}, h('span', {class: 'opt-letter'}, label)),
           h('div', {class: 'opt-main'}, h('span', {class: 'opt-text', lang: 'en'}, text))
         ]));
       });

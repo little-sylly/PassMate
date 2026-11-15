@@ -2,7 +2,7 @@
 (function (PM) {
   'use strict';
   PM.config = {
-    version: '0.7.1',            // keep in step with CACHE in sw.js
+    version: '0.7.2',            // keep in step with CACHE in sw.js
     storeKey: 'passmate.v1',
     storeVersion: 2,
     dataFiles: {'zh-Hans': 'data/content.zh-Hans.json', 'zh-Hant': 'data/content.zh-Hant.json'},
@@ -26,7 +26,8 @@
 
     // Plan engine (BUILD_PLAN: What each session draws). Days are calendar days.
     plan: {
-      boxDays: [0, 1, 3, 7],     // Leitner box n -> next review n days on (box 3 stays at +7)
+      boxDays: [0, 1, 3, 7, 14, 30],   // Leitner box n -> next review n days on (last box stays at +30); 14/30 added 15 Nov
+      rightGapDays: 7,           // a question she got right is not asked again for this many days, except to repair (Sam, 15 Nov)
       repeatDays: [1, 3],        // a missed question comes back 1 day later, then 3 days later
       repairQuestions: 5,        // about 60% of the questions: slots for stuck words, repeat mistakes and trap drills (not in sprint)
       minNewWords: 3,            // word slots kept for new words while any are left (not in sprint)
